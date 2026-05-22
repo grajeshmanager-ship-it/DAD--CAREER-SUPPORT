@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `You are a senior UK recruitment specialist with 15 years experience. Analyse this resume carefully. Return exactly:
+    const prompt = `You are a senior UK recruitment specialist with 15 years experience. First check if this document is actually a resume or CV. If it is NOT a resume — return this exact JSON only: {"error": "notResume", "message": "This does not appear to be a resume. Please upload your CV or resume."}. If it IS a resume then analyse it carefully and return:
 
 1. Top 5 specific skill gaps this person has compared to current UK job market demands — rate each as High Medium Low or Normal priority.
 2. Realistic UK salary range for this specific profile right now.
