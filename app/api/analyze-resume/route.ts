@@ -164,7 +164,7 @@ Only return valid JSON, no other text.`;
     }
 
     console.log("[v0] API: Analysis successful");
-    return NextResponse.json({ success: true, analysis: analysisResult });
+   return NextResponse.json({ success: true, analysis: analysisResult, resumeText: resumeText });
   } catch (error) {
     console.error("[v0] API: Resume analysis error:", error);
     return NextResponse.json(
