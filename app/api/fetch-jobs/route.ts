@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         if (data.results && data.results.length > 0) {
           const jobs = data.results.map((job) => {
             let salary = "Salary not specified";
-            if (job.salary_min && job.salary_max) {
+            let salary = ""; {
               const minSalary = new Intl.NumberFormat(countryConfig.locale, {
                 style: "currency",
                 currency: countryConfig.currency,
