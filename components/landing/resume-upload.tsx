@@ -71,7 +71,7 @@ export function ResumeUpload() {
         throw new Error(data.error || "Failed to analyze resume");
       }
 
-      setAnalysisResult(data.analysis);
+      setAnalysisResult(data.analysis);if (data.analysis?.resumeText) { sessionStorage.setItem('dadResumeText', data.analysis.resumeText); }
       setUploadState("complete");
       console.log("[v0] Analysis complete");
 
