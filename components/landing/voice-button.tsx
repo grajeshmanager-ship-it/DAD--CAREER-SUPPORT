@@ -103,7 +103,9 @@ export function VoiceButton() {
       
       try {
         console.log("[v0] Calling vapi.start()...");
-        await vapiRef.current.start(ASSISTANT_ID);
+        const resumeText = sessionStorage.getItem('dadResumeText') || '';
+const startOptions = resumeText ? { variableValues: { resumeContext: resumeText.substring(0, 1000) } } : undefined;
+await vapiRef.current.start(ASSISTANT_ID, startOptions);
         console.log("[v0] vapi.start() completed successfully");
       } catch (err) {
         console.error("[v0] vapi.start() failed:", err);
