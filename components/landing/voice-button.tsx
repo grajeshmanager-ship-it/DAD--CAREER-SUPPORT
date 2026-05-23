@@ -18,99 +18,87 @@ export function VoiceButton() {
 
   useEffect(() => {
     const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
-    
-    console.log("[v0] VoiceButton mounted");
-    console.log("[v0] NEXT_PUBLIC_VAPI_PUBLIC_KEY:", publicKey ? `present (${publicKey.substring(0, 8)}...)` : "MISSING");
 
     if (!publicKey) {
-      console.error("[v0] Vapi public key not found in environment");
       setError("Voice service not configured - missing API key");
       return;
     }
 
     try {
-      console.log("[v0] Creating Vapi instance with public key");
       const vapi = new Vapi(publicKey);
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
-        console.log("[v0] Vapi event: call-start");
         setIsConnecting(false);
         setIsCallActive(true);
         setError(null);
       });
 
       vapi.on("call-end", () => {
-        console.log("[v0] Vapi event: call-end");
         setIsCallActive(false);
         setIsConnecting(false);
         setIsSpeaking(false);
       });
 
-      vapi.on("speech-start", () => {
-        console.log("[v0] Vapi event: speech-start");
-        setIsSpeaking(true);
-      });
-
-      vapi.on("speech-end", () => {
-        console.log("[v0] Vapi event: speech-end");
-        setIsSpeaking(false);
-      });
+      vapi.on("speech-start", () => setIsSpeaking(true));
+      vapi.on("speech-end", () => setIsSpeaking(false));
 
       vapi.on("error", (err) => {
-        console.error("[v0] Vapi event: error", err);
-        const errorMessage = typeof err === 'object' && err !== null && 'message' in err 
-          ? String((err as { message: string }).message) 
+        const errorMessage = typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: string }).message)
           : "Voice call failed";
         setError(errorMessage);
         setIsCallActive(false);
         setIsConnecting(false);
       });
 
-      console.log("[v0] Vapi instance created successfully, ready for calls");
       setIsReady(true);
 
-      return () => {
-        console.log("[v0] Cleaning up Vapi instance");
-        vapi.stop();
-      };
+      return () => { vapi.stop(); };
     } catch (err) {
-      console.error("[v0] Failed to create Vapi instance:", err);
       setError("Failed to initialize voice service");
     }
   }, []);
 
   const handleCallToggle = async () => {
-    console.log("[v0] handleCallToggle called");
-    console.log("[v0] Current state - isCallActive:", isCallActive, "isConnecting:", isConnecting, "isReady:", isReady);
-    console.log("[v0] vapiRef.current:", vapiRef.current ? "exists" : "null");
-    
     if (!vapiRef.current) {
-      console.error("[v0] Vapi instance not available");
       setError("Voice service not ready. Please refresh the page.");
       return;
     }
 
     if (isCallActive || isConnecting) {
-      console.log("[v0] Stopping current call");
       vapiRef.current.stop();
       setIsCallActive(false);
       setIsConnecting(false);
     } else {
-      console.log("[v0] Starting new call with assistant ID:", ASSISTANT_ID);
       setIsConnecting(true);
       setError(null);
-      
+
       try {
-        console.log("[v0] Calling vapi.start()...");
         const resumeText = sessionStorage.getItem('dadResumeText') || '';
-const startOptions = resumeText ? { variableValues: { resumeContext: resumeText.substring(0, 1000) } } : undefined;
-await vapiRef.current.start(ASSISTANT_ID, startOptions);
-        console.log("[v0] vapi.start() completed successfully");
+        
+        if (resumeText) {
+          await vapiRef.current.start(ASSISTANT_ID, {
+            assistantOverrides: {
+              firstMessage: "Hey. I can see you've uploaded your resume. I've had a look at it. Tell me — how are you feeling about your job search right now?",
+              model: {
+                provider: "anthropic",
+                model: "claude-sonnet-4-6",
+                messages: [
+                  {
+                    role: "system",
+                    content: `You are DAD. You already know this person. They are your child. You have read their resume. Here are the details from their resume: ${resumeText.substring(0, 2000)}. Use this to personalise your conversation. Reference their specific skills and experience naturally as a father would. Never sound like a bot. Always speak warmly and honestly.`
+                  }
+                ]
+              }
+            }
+          });
+        } else {
+          await vapiRef.current.start(ASSISTANT_ID);
+        }
       } catch (err) {
-        console.error("[v0] vapi.start() failed:", err);
-        const errorMessage = typeof err === 'object' && err !== null && 'message' in err 
-          ? String((err as { message: string }).message) 
+        const errorMessage = typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: string }).message)
           : "Failed to start voice call. Please check microphone permissions.";
         setError(errorMessage);
         setIsConnecting(false);
@@ -138,10 +126,7 @@ await vapiRef.current.start(ASSISTANT_ID, startOptions);
             <div
               key={i}
               className="absolute inset-0 rounded-full border-2 border-primary/30 animate-ping"
-              style={{
-                animationDelay: `${i * 0.3}s`,
-                animationDuration: "2s",
-              }}
+              style={{ animationDelay: `${i * 0.3}s`, animationDuration: "2s" }}
             />
           ))}
 
@@ -151,10 +136,7 @@ await vapiRef.current.start(ASSISTANT_ID, startOptions);
             disabled={isConnecting || !isReady}
             className={`
               relative w-32 h-32 rounded-full transition-all duration-300
-              ${isActive 
-                ? "bg-primary hover:bg-primary/90 scale-110" 
-                : "bg-card hover:bg-card/80 border-2 border-border hover:border-primary/50"
-              }
+              ${isActive ? "bg-primary hover:bg-primary/90 scale-110" : "bg-card hover:bg-card/80 border-2 border-border hover:border-primary/50"}
               ${isConnecting ? "animate-pulse" : ""}
               ${!isReady ? "opacity-50 cursor-not-allowed" : ""}
             `}
@@ -169,13 +151,9 @@ await vapiRef.current.start(ASSISTANT_ID, startOptions);
 
         <p className="mt-8 text-muted-foreground">
           {!isReady && !error ? (
-            <span className="flex items-center justify-center gap-2">
-              Initializing voice service...
-            </span>
+            <span className="flex items-center justify-center gap-2">Initializing voice service...</span>
           ) : error ? (
-            <span className="flex items-center justify-center gap-2 text-red-500">
-              {error}
-            </span>
+            <span className="flex items-center justify-center gap-2 text-red-500">{error}</span>
           ) : isConnecting ? (
             <span className="flex items-center justify-center gap-2">
               <Volume2 className="w-4 h-4 text-primary animate-pulse" />
@@ -197,10 +175,7 @@ await vapiRef.current.start(ASSISTANT_ID, startOptions);
             "\"Help me figure out my career path\"",
             "\"Review my elevator pitch\"",
           ].map((prompt, i) => (
-            <div
-              key={i}
-              className="p-4 rounded-xl bg-card/50 border border-border/50 text-muted-foreground italic"
-            >
+            <div key={i} className="p-4 rounded-xl bg-card/50 border border-border/50 text-muted-foreground italic">
               {prompt}
             </div>
           ))}
