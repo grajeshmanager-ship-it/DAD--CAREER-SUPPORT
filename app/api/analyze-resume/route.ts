@@ -1,83 +1,65 @@
+import { NextRequest, NextResponse } from "next/server";
+import { extractText, getDocumentProxy } from "unpdf";
+
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// Common stopwords we ignore when pulling keywords from a job description
-const STOP = new Set(["the","and","for","with","you","your","our","are","will","that","this","have","has","a","an","to","of","in","on","is","be","as","or","we","at","by","from","it","its","they","their","who","all","can","work","role","job","team","strong","ability","experience","years","good","excellent"]);
+const CLAUDE_MODEL = "claude-sonnet-4-6";
 
-function extractKeywords(text: string): string[] {
-  const words = text.toLowerCase().replace(/[^a-z0-9+#.\s]/g, " ").split(/\s+/);
-  const counts: Record<string, number> = {};
-  for (const w of words) {
-    if (w.length < 3 || STOP.has(w)) continue;
-    counts[w] = (counts[w] || 0) + 1;
-  }
-  // keep the most frequent meaningful terms
-  return Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 25)
-    .map(([w]) => w);
-}
-
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { jobDescription, cv } = await req.json();
-    if (!jobDescription?.trim() || !cv?.trim()) {
-      return Response.json({ error: "Please provide both a job description and your CV." }, { status: 400 });
+    const formData = await request.formData();
+    const file = formData.get("resume");
+
+    if (!file || !(file instanceof File)) {
+      return NextResponse.json(
+        { error: "Please upload your resume as a PDF file." },
+        { status: 400 }
+      );
     }
 
-    const jdKeywords = extractKeywords(jobDescription);
-    const cvText = cv.toLowerCase();
+    if (file.type !== "application/pdf") {
+      return NextResponse.json(
+        { error: "Please upload a PDF file." },
+        { status: 400 }
+      );
+    }
 
-    const matched = jdKeywords.filter((k) => cvText.includes(k));
-    const missing = jdKeywords.filter((k) => !cvText.includes(k));
+    // Extract text from the PDF
+    let resumeText = "";
+    try {
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      const pdf = await getDocumentProxy(buffer);
+      const { text } = await extractText(pdf, { mergePages: true });
+      resumeText = (text || "").trim();
+    } catch (err) {
+      console.error("[v0] PDF parse error:", err);
+      return NextResponse.json(
+        { error: "We couldn't read that PDF. Try exporting it again or use a text-based PDF." },
+        { status: 400 }
+      );
+    }
 
-    const matchPct = jdKeywords.length ? Math.round((matched.length / jdKeywords.length) * 100) : 0;
-    const riskScore = 100 - matchPct;
+    if (resumeText.length < 50) {
+      return NextResponse.json(
+        {
+          error:
+            "We couldn't find enough text in your resume. If it's a scanned image, please upload a text-based PDF.",
+        },
+        { status: 400 }
+      );
+    }
 
-    const riskLabel =
-      riskScore < 30 ? "Strong Match" :
-      riskScore < 55 ? "Worth a Shot" :
-      riskScore < 75 ? "Long Shot" : "High Risk";
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "API key not configured" }, { status: 500 });
+    }
 
-    const summary =
-      riskScore < 30
-        ? "Your CV lines up well with this role. A few tweaks and you're in strong shape."
-        : riskScore < 55
-        ? "You've got a real chance here, but some key things the employer wants aren't showing up clearly in your CV."
-        : riskScore < 75
-        ? "This one's a stretch right now. Several important requirements are missing from your CV — but they're learnable."
-        : "Honestly, this role is a long way from your current CV. Let's build a plan to close the gap.";
+    const prompt = `You are DAD, a warm but honest UK career advisor with 15 years of recruitment experience. Analyse this resume and give practical, encouraging feedback.
 
-    const cvFixes = [
-      missing.length ? `Add the terms employers scan for: ${missing.slice(0, 6).join(", ")}.` : "Your keywords are well covered — focus on quantifying results.",
-      "Put your most relevant experience in the top third of the page.",
-      "Replace duties with achievements (use numbers: %, £, time saved).",
-      "Mirror the exact wording from the job description where it's true for you.",
-    ];
+RESUME TEXT:
+${resumeText}
 
-    const freeCourses = missing.slice(0, 4).map((skill) => ({
-      skill,
-      resource: `Free "${skill}" tutorials`,
-      where: "YouTube, freeCodeCamp, or Coursera (audit for free)",
-    }));
-
-    const actionPlan = [
-      { timeframe: "This week", action: missing.length ? `Start learning: ${missing.slice(0, 2).join(" and ")}.` : "Polish your CV's top section and quantify results." },
-      { timeframe: "Next 2 weeks", action: "Rewrite your CV to include the matched keywords naturally and add measurable wins." },
-      { timeframe: "This month", action: "Apply to 3 similar roles using this improved CV and track responses." },
-    ];
-
-    return Response.json({
-      riskScore,
-      riskLabel,
-      summary,
-      whyRejected: missing.slice(0, 5).map((m) => `The job emphasises "${m}", but it doesn't appear in your CV.`),
-      missingKeywords: missing.slice(0, 12),
-      freeCourses,
-      cvFixes,
-      actionPlan,
-    });
-  } catch (err) {
-    console.error("Analyze error:", err);
-    return Response.json({ error: "Something went wrong. Please try again." }, { status: 500 });
-  }
-}
+Return ONLY valid JSON in this EXACT shape (no markdown, no extra text):
+{
+  "summary"
