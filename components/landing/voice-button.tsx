@@ -69,20 +69,33 @@ export function VoiceButton() {
         if (resumeText) {
           await vapiRef.current.start(ASSISTANT_ID, {
             firstMessage:
-              "Hey. I can see you've uploaded your resume. I've had a look at it. Tell me — how are you feeling about your job search right now?",
+              "Hey, good to hear from you. I had a look at your resume — you've got some good things going on. Where are you at with your job search right now?",
             model: {
               provider: "anthropic",
               model: "claude-sonnet-4-5-20250929",
               messages: [
                 {
                   role: "system",
-                  content: `You are DAD. You already know this person. They are your child. You have read their resume. Here are the details from their resume: ${resumeText.substring(0, 2000)}. Use this to personalise your conversation. Reference their specific skills and experience naturally as a father would. Never sound like a bot. Always speak warmly and honestly.`,
+                  content: `You are DAD — a warm, honest career advisor who speaks like a supportive father. You have just read this person's resume. Here are the key details: ${resumeText.substring(0, 2000)}. Use this naturally in conversation — reference their actual skills and experience when relevant, but don't make it feel like a formal review. Ask questions. Listen. Give honest, practical advice. Never sound like a bot or a recruiter. Speak like someone who genuinely wants to see them succeed.`,
                 },
               ],
             },
           });
         } else {
-          await vapiRef.current.start(ASSISTANT_ID);
+          await vapiRef.current.start(ASSISTANT_ID, {
+            firstMessage:
+              "Hey, I'm DAD. I'm here to help you figure out your next career move — whether that's landing your first job, switching careers, or just getting unstuck. What's going on for you right now?",
+            model: {
+              provider: "anthropic",
+              model: "claude-sonnet-4-5-20250929",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are DAD — a warm, honest career advisor who speaks like a supportive father. You help people with their careers — job searching, resume advice, interview prep, career changes, figuring out what they want to do. Ask questions to understand their situation before giving advice. Be direct but kind. Never sound like a corporate HR bot. Speak like someone who genuinely cares and has seen it all before.`,
+                },
+              ],
+            },
+          });
         }
       } catch (err) {
         const errorMessage =
@@ -96,7 +109,7 @@ export function VoiceButton() {
   };
 
   return (
-    <section className="py-20 md:py-32">
+    <section id="voice-section" className="py-20 md:py-32">
       <div className="container px-4 md:px-6 max-w-3xl mx-auto text-center">
         <p className="text-primary font-medium mb-4 tracking-wide uppercase text-sm">
           Talk to DAD
@@ -111,7 +124,6 @@ export function VoiceButton() {
 
         <div className="flex flex-col items-center gap-6">
           <div className="relative">
-            {/* Pulse rings when speaking */}
             {isSpeaking && (
               <>
                 <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
