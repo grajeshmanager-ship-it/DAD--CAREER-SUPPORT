@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ADZUNA_APP_ID = "e1f4d6c9";
-const ADZUNA_APP_KEY = "5e40d460a5a63736cfc1e438fec6e1b6";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID;
+const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
 
 // Adzuna country codes
 const COUNTRY_CODES: Record<string, { code: string; currency: string; locale: string }> = {
@@ -13,8 +16,8 @@ const COUNTRY_CODES: Record<string, { code: string; currency: string; locale: st
 interface AdzunaJob {
   id: string;
   title: string;
-  company: { display_name: string };
-  location: { display_name: string };
+  company?: { display_name?: string };
+  location?: { display_name?: string };
   salary_min?: number;
   salary_max?: number;
   redirect_url: string;
@@ -23,7 +26,17 @@ interface AdzunaJob {
 }
 
 interface AdzunaResponse {
-  results: AdzunaJob[];
+  results?: AdzunaJob[];
+}
+
+interface NormalisedJob {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  url: string;
+  searchedTitle: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -34,31 +47,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No job titles provided" }, { status: 400 });
     }
 
+    if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) {
+      return NextResponse.json(
+        { error: "Job search is not configured. Missing Adzuna credentials." },
+        { status: 500 }
+      );
+    }
+
     const countryConfig = COUNTRY_CODES[country] || COUNTRY_CODES["United Kingdom"];
 
-    // Fetch jobs for each title and combine results
-    const allJobs: Array<{
-      id: string;
-      title: string;
-      company: string;
-      location: string;
-      salary: string;
-      url: string;
-      searchedTitle: string;
-    }> = [];
+    const formatMoney = (value: number) =>
+      new Intl.NumberFormat(countryConfig.locale, {
+        style: "currency",
+        currency: countryConfig.currency,
+        maximumFractionDigits: 0,
+      }).format(value);
+
+    const allJobs: NormalisedJob[] = [];
 
     for (const title of jobTitles.slice(0, 3)) {
       const searchQuery = encodeURIComponent(title);
       let url = `https://api.adzuna.com/v1/api/jobs/${countryConfig.code}/search/1?app_id=${ADZUNA_APP_ID}&app_key=${ADZUNA_APP_KEY}&results_per_page=5&what=${searchQuery}&content-type=application/json`;
-      
-      // Add city/location filter if provided
+
       if (city && city.trim()) {
         url += `&where=${encodeURIComponent(city.trim())}`;
       }
 
       try {
         const response = await fetch(url);
-        
+
         if (!response.ok) {
           console.error(`Adzuna API error for "${title}":`, response.status);
           continue;
@@ -67,33 +84,22 @@ export async function POST(request: NextRequest) {
         const data: AdzunaResponse = await response.json();
 
         if (data.results && data.results.length > 0) {
-          const jobs = data.results.map((job) => {
+          const jobs: NormalisedJob[] = data.results.map((job) => {
             let salary = "Salary not specified";
-            let salary = ""; {
-              const minSalary = new Intl.NumberFormat(countryConfig.locale, {
-                style: "currency",
-                currency: countryConfig.currency,
-                maximumFractionDigits: 0,
-              }).format(job.salary_min);
-              const maxSalary = new Intl.NumberFormat(countryConfig.locale, {
-                style: "currency",
-                currency: countryConfig.currency,
-                maximumFractionDigits: 0,
-              }).format(job.salary_max);
-              salary = `${minSalary} - ${maxSalary}`;
+
+            if (job.salary_min && job.salary_max) {
+              salary = `${formatMoney(job.salary_min)} - ${formatMoney(job.salary_max)}`;
             } else if (job.salary_min) {
-              salary = new Intl.NumberFormat(countryConfig.locale, {
-                style: "currency",
-                currency: countryConfig.currency,
-                maximumFractionDigits: 0,
-              }).format(job.salary_min);
+              salary = formatMoney(job.salary_min);
+            } else if (job.salary_max) {
+              salary = formatMoney(job.salary_max);
             }
 
             return {
-              id: job.id,
+              id: String(job.id),
               title: job.title,
               company: job.company?.display_name || "Company not specified",
-              location: job.location?.display_name || "UK",
+              location: job.location?.display_name || country,
               salary,
               url: job.redirect_url,
               searchedTitle: title,
