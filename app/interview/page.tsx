@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  ArrowRight, ArrowLeft, Loader2, Mic, MicOff,
+  ArrowRight, ArrowLeft, Mic, MicOff,
   CheckCircle, XCircle, AlertCircle, ChevronDown,
   ChevronUp, RotateCcw, FileText, Brain, Target,
   TrendingUp, BookOpen, Star
@@ -87,22 +87,23 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recognition, setRecognition] = useState<unknown>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [recognition, setRecognition] = useState<any>(null);
 
   const startVoiceInput = () => {
-    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const SpeechRecognitionAPI = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
       setError("Voice input not supported in this browser. Please type your answer.");
       return;
     }
-    const SpeechRecognitionAPI =
-      (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ||
-      (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) return;
     const rec = new SpeechRecognitionAPI();
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-GB";
-    rec.onresult = (event: SpeechRecognitionEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (event: any) => {
       let transcript = "";
       for (let i = 0; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
@@ -112,12 +113,12 @@ export default function InterviewPage() {
     rec.onerror = () => setIsRecording(false);
     rec.onend = () => setIsRecording(false);
     rec.start();
-    setRecognition(rec as unknown as SpeechRecognition);
+    setRecognition(rec);
     setIsRecording(true);
   };
 
   const stopVoiceInput = () => {
-    recognition?.stop();
+    if (recognition) recognition.stop();
     setIsRecording(false);
   };
 
