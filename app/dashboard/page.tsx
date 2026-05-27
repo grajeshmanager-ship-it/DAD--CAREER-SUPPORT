@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   FileText, Brain, Briefcase, LogOut, User,
-  ArrowRight, Clock, ChevronRight, Sparkles
+  ArrowRight, Clock, ChevronRight, Sparkles, Mic
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -136,15 +136,15 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4 mb-10">
+        <div className="grid md:grid-cols-2 gap-4 mb-10">
           <Link href="/#resume-upload">
-            <Card className="p-6 border border-border hover:border-primary/50 transition-all duration-200 cursor-pointer group bg-card/50 hover:bg-card">
+            <Card className="p-6 border border-border hover:border-primary/50 transition-all duration-200 cursor-pointer group bg-card/50 hover:bg-card h-full">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                 <FileText className="w-6 h-6 text-primary" />
               </div>
               <h3 className="font-semibold text-lg mb-1">Resume Review</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Upload your CV and DAD will tell you exactly what recruiters see
+                Upload your CV and DAD will tell you exactly what recruiters see — skills gaps, ATS score, salary range
               </p>
               <div className="flex items-center text-primary text-sm font-medium">
                 Upload resume <ChevronRight className="w-4 h-4 ml-1" />
@@ -153,13 +153,13 @@ export default function DashboardPage() {
           </Link>
 
           <Link href="/#fresher-journey">
-            <Card className="p-6 border border-border hover:border-primary/50 transition-all duration-200 cursor-pointer group bg-card/50 hover:bg-card">
+            <Card className="p-6 border border-border hover:border-primary/50 transition-all duration-200 cursor-pointer group bg-card/50 hover:bg-card h-full">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                 <Brain className="w-6 h-6 text-primary" />
               </div>
               <h3 className="font-semibold text-lg mb-1">Career Assessment</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Answer questions about yourself and DAD will map your career path
+                Answer questions about yourself and DAD will map your career path and recommend next steps
               </p>
               <div className="flex items-center text-primary text-sm font-medium">
                 Start assessment <ChevronRight className="w-4 h-4 ml-1" />
@@ -167,14 +167,32 @@ export default function DashboardPage() {
             </Card>
           </Link>
 
-          <Link href="/#voice-section">
-            <Card className="p-6 border border-border hover:border-primary/50 transition-all duration-200 cursor-pointer group bg-card/50 hover:bg-card">
+          <Link href="/interview">
+            <Card className="p-6 border border-border hover:border-primary/50 transition-all duration-200 cursor-pointer group bg-card/50 hover:bg-card h-full relative overflow-hidden">
+              <div className="absolute top-3 right-3">
+                <span className="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5 font-medium">New</span>
+              </div>
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                 <Briefcase className="w-6 h-6 text-primary" />
               </div>
+              <h3 className="font-semibold text-lg mb-1">Mock Interview</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Paste a job description — DAD interviews you like a real recruiter and gives honest feedback with a prep guide
+              </p>
+              <div className="flex items-center text-primary text-sm font-medium">
+                Start interview <ChevronRight className="w-4 h-4 ml-1" />
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/#voice-section">
+            <Card className="p-6 border border-border hover:border-primary/50 transition-all duration-200 cursor-pointer group bg-card/50 hover:bg-card h-full">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                <Mic className="w-6 h-6 text-primary" />
+              </div>
               <h3 className="font-semibold text-lg mb-1">Talk to DAD</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Have a real voice conversation — career advice, interview prep, anything
+                Have a real voice conversation — career advice, interview prep, or just talk through what's on your mind
               </p>
               <div className="flex items-center text-primary text-sm font-medium">
                 Start talking <ChevronRight className="w-4 h-4 ml-1" />
@@ -195,7 +213,8 @@ export default function DashboardPage() {
                   <div>
                     <p className="font-medium text-sm capitalize">
                       {a.journey_type === "resume_upload" ? "Resume Review" :
-                       a.journey_type === "fresher_assessment" ? "Career Assessment" : a.journey_type}
+                       a.journey_type === "fresher_assessment" ? "Career Assessment" :
+                       a.journey_type === "mock_interview" ? "Mock Interview" : a.journey_type}
                     </p>
                     {a.skill_path && (
                       <p className="text-xs text-muted-foreground mt-0.5">{a.skill_path}</p>
