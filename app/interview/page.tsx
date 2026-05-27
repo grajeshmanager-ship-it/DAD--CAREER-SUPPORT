@@ -11,6 +11,7 @@ import {
   TrendingUp, BookOpen, Star, Upload
 } from "lucide-react";
 import Link from "next/link";
+import { DadLoading } from "@/components/ui/dad-loading";
 
 type Stage = "setup" | "intel" | "interview" | "debrief";
 
@@ -233,17 +234,13 @@ export default function InterviewPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto animate-pulse">
-            <Brain className="w-8 h-8 text-primary" />
-          </div>
-          <p className="text-lg font-medium">
-            {stage === "setup" ? "DAD is analysing the job description..." : "DAD is reviewing your answers..."}
-          </p>
-          <p className="text-muted-foreground text-sm">This takes about 15 seconds</p>
-        </div>
-      </div>
+      <DadLoading
+        message={
+          stage === "setup"
+            ? "DAD is analysing the job description..."
+            : "DAD is reviewing your answers..."
+        }
+      />
     );
   }
 
@@ -285,7 +282,6 @@ export default function InterviewPage() {
                 Your Resume <span className="text-muted-foreground text-xs">(optional but recommended — helps DAD personalise the questions)</span>
               </label>
 
-              {/* Upload box */}
               <div
                 className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-200 mb-3 ${
                   resumeText && resumeFileName
