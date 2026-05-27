@@ -87,7 +87,7 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [recognition, setRecognition] = useState<unknown>(null);
 
   const startVoiceInput = () => {
     if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
