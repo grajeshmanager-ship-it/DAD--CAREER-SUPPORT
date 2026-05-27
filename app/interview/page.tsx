@@ -8,7 +8,7 @@ import {
   ArrowRight, ArrowLeft, Mic, MicOff,
   CheckCircle, XCircle, AlertCircle, ChevronDown,
   ChevronUp, RotateCcw, FileText, Brain, Target,
-  TrendingUp, BookOpen, Star
+  TrendingUp, BookOpen, Star, Upload
 } from "lucide-react";
 import Link from "next/link";
 
@@ -78,6 +78,8 @@ export default function InterviewPage() {
   const [stage, setStage] = useState<Stage>("setup");
   const [jobDescription, setJobDescription] = useState("");
   const [resumeText, setResumeText] = useState("");
+  const [resumeFileName, setResumeFileName] = useState("");
+  const [resumeLoading, setResumeLoading] = useState(false);
   const [plan, setPlan] = useState<InterviewPlan | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -89,6 +91,33 @@ export default function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [recognition, setRecognition] = useState<any>(null);
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResumeLoading(true);
+    setResumeFileName(file.name);
+    try {
+      if (file.type === "application/pdf") {
+        const formData = new FormData();
+        formData.append("resume", file);
+        const res = await fetch("/api/analyze-resume", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.analysis?.resumeText) {
+          setResumeText(data.analysis.resumeText);
+        } else {
+          setError("Could not extract text from PDF. Please paste your resume below instead.");
+        }
+      } else {
+        const text = await file.text();
+        setResumeText(text);
+      }
+    } catch {
+      setError("Could not read the file. Please paste your resume below instead.");
+    } finally {
+      setResumeLoading(false);
+    }
+  };
 
   const startVoiceInput = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -193,6 +222,7 @@ export default function InterviewPage() {
     setStage("setup");
     setJobDescription("");
     setResumeText("");
+    setResumeFileName("");
     setPlan(null);
     setAnswers([]);
     setCurrentQuestion(0);
@@ -248,18 +278,64 @@ export default function InterviewPage() {
                 placeholder="Paste the full job description here..."
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
-                className="min-h-[200px] bg-background resize-none mb-4"
+                className="min-h-[200px] bg-background resize-none mb-6"
               />
-              <label className="block text-sm font-medium mb-2">
-                Your Resume <span className="text-muted-foreground text-xs">(optional but recommended)</span>
+
+              <label className="block text-sm font-medium mb-3">
+                Your Resume <span className="text-muted-foreground text-xs">(optional but recommended — helps DAD personalise the questions)</span>
               </label>
+
+              {/* Upload box */}
+              <div
+                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-200 mb-3 ${
+                  resumeText && resumeFileName
+                    ? "border-green-500/50 bg-green-500/5"
+                    : "border-border hover:border-primary/50 hover:bg-primary/5"
+                }`}
+                onClick={() => document.getElementById("resume-upload-interview")?.click()}
+              >
+                <input
+                  id="resume-upload-interview"
+                  type="file"
+                  accept=".pdf,.txt,.doc,.docx"
+                  className="hidden"
+                  onChange={handleResumeUpload}
+                />
+                {resumeLoading ? (
+                  <div className="space-y-2">
+                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-sm text-muted-foreground">Reading your resume...</p>
+                  </div>
+                ) : resumeText && resumeFileName ? (
+                  <div className="space-y-1">
+                    <CheckCircle className="w-8 h-8 text-green-400 mx-auto" />
+                    <p className="text-sm font-medium text-green-400">Resume loaded!</p>
+                    <p className="text-xs text-muted-foreground">{resumeFileName}</p>
+                    <p className="text-xs text-muted-foreground">Click to upload a different file</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Upload className="w-8 h-8 text-muted-foreground mx-auto" />
+                    <p className="text-sm font-medium">Click to upload your resume</p>
+                    <p className="text-xs text-muted-foreground">PDF, TXT, DOC, DOCX supported</p>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-center text-muted-foreground mb-3">— or paste it below —</p>
+
               <Textarea
-                placeholder="Paste your resume text here so DAD can personalise the questions..."
+                placeholder="Paste your resume text here..."
                 value={resumeText}
-                onChange={(e) => setResumeText(e.target.value)}
-                className="min-h-[120px] bg-background resize-none"
+                onChange={(e) => {
+                  setResumeText(e.target.value);
+                  if (resumeFileName) setResumeFileName("");
+                }}
+                className="min-h-[100px] bg-background resize-none"
               />
+
               {error && <p className="text-sm text-destructive mt-3">{error}</p>}
+
               <Button
                 onClick={handlePrepare}
                 className="w-full mt-4 rounded-full"
