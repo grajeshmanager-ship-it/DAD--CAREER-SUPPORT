@@ -196,7 +196,6 @@ export default function ResumePage() {
               <ArrowLeft className="w-4 h-4" /> Upload another
             </Button>
 
-            {/* ATS Score + Salary */}
             <div className="grid md:grid-cols-2 gap-4">
               <Card className="p-6 border border-border bg-card/50">
                 <p className="text-sm text-muted-foreground mb-2">ATS Score</p>
@@ -232,14 +231,12 @@ export default function ResumePage() {
               </Card>
             </div>
 
-            {/* Summary */}
             {result.summary && (
               <Card className="p-6 border border-primary/20 bg-primary/5">
                 <p className="text-sm leading-relaxed">{result.summary}</p>
               </Card>
             )}
 
-            {/* ATS Improvements */}
             {result.atsScore?.improvements?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -256,7 +253,6 @@ export default function ResumePage() {
               </Card>
             )}
 
-            {/* Missing Keywords */}
             {result.atsScore?.missingKeywords?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
@@ -273,7 +269,6 @@ export default function ResumePage() {
               </Card>
             )}
 
-            {/* Skill Gaps */}
             {result.skillGaps?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -297,7 +292,6 @@ export default function ResumePage() {
               </Card>
             )}
 
-            {/* Job Matches */}
             {result.jobMatches?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -321,7 +315,6 @@ export default function ResumePage() {
               </Card>
             )}
 
-            {/* Courses */}
             {result.courses?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -354,7 +347,6 @@ export default function ResumePage() {
               </Card>
             )}
 
-            {/* Formatting Issues */}
             {result.atsScore?.formattingIssues?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
