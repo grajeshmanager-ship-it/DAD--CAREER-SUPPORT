@@ -21,6 +21,12 @@ const COMPANION_LABELS: Record<string, string> = {
   partner: "Partner", self: "Yourself",
 };
 
+const COMPANION_EMOJIS: Record<string, string> = {
+  dad: "👨", mom: "👩", brother: "👦", sister: "👧",
+  teacher: "🧑‍🏫", mentor: "🧭", friend: "🤝",
+  partner: "💑", self: "⭐",
+};
+
 const COMPANION_GREETINGS: Record<string, string[]> = {
   dad: [
     "Hey, I'm glad you called. Tell me what's going on with the job search.",
@@ -91,12 +97,15 @@ export default function VoicePage() {
   }, []);
 
   useEffect(() => {
-    // Load Vapi
     const script = document.createElement("script");
     script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.js";
     script.onload = () => setVapiLoaded(true);
     document.head.appendChild(script);
-    return () => { document.head.removeChild(script); };
+    return () => {
+      if (document.head.contains(script)) {
+        document.head.removeChild(script);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -128,21 +137,19 @@ export default function VoicePage() {
     const selectedGreeting = getGreeting();
     setGreeting(selectedGreeting);
 
-    if (vapiLoaded && process.env.NEXT_PUBLIC_VAPI_KEY) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    if (vapiLoaded && w.Vapi && process.env.NEXT_PUBLIC_VAPI_KEY) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const VapiSDK = (window as any).Vapi;
-        const vapiInstance = new VapiSDK(process.env.NEXT_PUBLIC_VAPI_KEY);
-
+        const vapiInstance = new w.Vapi(process.env.NEXT_PUBLIC_VAPI_KEY);
         vapiInstance.on("call-start", () => setCallActive(true));
         vapiInstance.on("call-end", () => { setCallActive(false); setVapi(null); });
         vapiInstance.on("error", () => setCallActive(false));
-
         await vapiInstance.start({
           model: {
             provider: "anthropic",
             model: "claude-sonnet-4-6",
-            systemPrompt: `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey. 
+            systemPrompt: `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey.
 
 Your personality: warm, honest, genuinely caring, direct when needed. You remember this person and care about their success.
 
@@ -167,7 +174,6 @@ Start with: "${selectedGreeting}"`,
           },
           firstMessage: selectedGreeting,
         });
-
         setVapi(vapiInstance);
       } catch {
         setCallActive(true);
@@ -187,24 +193,14 @@ Start with: "${selectedGreeting}"`,
 
   const toggleMute = () => {
     if (vapi) {
-      try {
-        vapi.setMuted(!muted);
-        setMuted(!muted);
-      } catch { /* ignore */ }
-    } else {
-      setMuted(!muted);
+      try { vapi.setMuted(!muted); } catch { /* ignore */ }
     }
+    setMuted(!muted);
   };
 
   const companionType = profile?.companion_type || "dad";
   const companionName = profile?.companion_name || "DAD";
   const companionLabel = COMPANION_LABELS[companionType] || "Guide";
-
-  const COMPANION_EMOJIS: Record<string, string> = {
-    dad: "👨", mom: "👩", brother: "👦", sister: "👧",
-    teacher: "🧑‍🏫", mentor: "🧭", friend: "🤝",
-    partner: "💑", self: "⭐",
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -221,7 +217,6 @@ Start with: "${selectedGreeting}"`,
       <main className="container px-4 md:px-6 max-w-md mx-auto py-16">
         {!callActive ? (
           <div className="text-center space-y-8">
-            {/* Companion avatar */}
             <div className="relative inline-block">
               <div className="w-32 h-32 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center mx-auto text-6xl">
                 {COMPANION_EMOJIS[companionType]}
@@ -250,13 +245,72 @@ Start with: "${selectedGreeting}"`,
               ))}
             </Card>
 
-            <Button
-              onClick={startCall}
-              size="lg"
-              className="w-full rounded-full text-lg py-6 gap-3"
-            >
+            <Button onClick={startCall} size="lg" className="w-full rounded-full text-lg py-6 gap-3">
               <Phone className="w-5 h-5" />
               Call {companionName}
             </Button>
 
-            <p class
+            <p className="text-xs text-muted-foreground">
+              {companionName} will answer immediately and remember your context
+            </p>
+          </div>
+        ) : (
+          <div className="text-center space-y-8">
+            <div className="relative inline-block">
+              <div className="w-36 h-36 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center mx-auto text-6xl animate-pulse">
+                {COMPANION_EMOJIS[companionType]}
+              </div>
+              {[1, 2, 3].map(i => (
+                <div
+                  key={i}
+                  className="absolute inset-0 rounded-full border border-primary/20 animate-ping"
+                  style={{ animationDelay: `${i * 0.3}s`, animationDuration: "2s" }}
+                />
+              ))}
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-bold mb-1">{companionName}</h2>
+              <p className="text-primary text-sm font-medium">● On call · {formatDuration(callDuration)}</p>
+            </div>
+
+            {greeting && (
+              <Card className="p-5 border border-primary/20 bg-primary/5">
+                <p className="text-sm italic text-muted-foreground">"{greeting}"</p>
+                <p className="text-xs text-primary mt-2">— {companionName}</p>
+              </Card>
+            )}
+
+            <div className="flex gap-4 justify-center">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={toggleMute}
+                className={`rounded-full w-16 h-16 p-0 ${muted ? "border-red-500 text-red-500" : ""}`}
+              >
+                {muted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              </Button>
+              <Button
+                size="lg"
+                onClick={endCall}
+                className="rounded-full w-16 h-16 p-0 bg-red-500 hover:bg-red-600"
+              >
+                <PhoneOff className="w-6 h-6" />
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              {muted ? "You are muted" : `Speak naturally — ${companionName} is listening`}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-12 text-center">
+          <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2">
+            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          </Link>
+        </div>
+      </main>
+    </div>
+  );
+}
