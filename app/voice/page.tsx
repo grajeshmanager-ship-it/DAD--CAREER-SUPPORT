@@ -132,7 +132,7 @@ export default function VoicePage() {
   };
 
   const startCall = async () => {
-    const vapiKey = process.env.NEXT_PUBLIC_VAPI_KEY;
+    const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
     if (!vapiKey) {
       setStatus("Vapi key not configured");
       return;
