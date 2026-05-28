@@ -1,38 +1,90 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
-export function DadLoading({ message = "Just a moment..." }: { message?: string }) {
+interface DadLoadingProps {
+  message?: string;
+}
+
+const COMPANION_VOICE_LINES: Record<string, (name: string) => string> = {
+  dad: (name) => `${name} is working for you right now. He believes in you.`,
+  mom: (name) => `${name} is working for you right now. She believes in you.`,
+  brother: (name) => `${name} is working for you right now. He's got your back.`,
+  sister: (name) => `${name} is working for you right now. She's got your back.`,
+  teacher: (name) => `${name} is working for you right now. They believe in what you're capable of.`,
+  mentor: (name) => `${name} is working for you right now. They know you can do this.`,
+  friend: (name) => `${name} is working for you right now. They're in your corner.`,
+  partner: (name) => `${name} is working for you right now. They believe in you completely.`,
+  self: (name) => `${name}, you are working for yourself right now. Keep going.`,
+};
+
+const COMPANION_FEMALE = ["mom", "sister", "partner"];
+
+export function DadLoading({ message = "Just a moment..." }: DadLoadingProps) {
+  const [companionName, setCompanionName] = useState<string | null>(null);
+  const [companionType, setCompanionType] = useState<string | null>(null);
+
   useEffect(() => {
-    // Speak as soon as loading appears
+    const loadProfile = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from("profiles")
+          .select("companion_name, companion_type")
+          .eq("id", user.id)
+          .single();
+        if (data?.companion_name) setCompanionName(data.companion_name);
+        if (data?.companion_type) setCompanionType(data.companion_type);
+      } catch {
+        // silently fail — fallback to default
+      }
+    };
+    loadProfile();
+  }, []);
+
+  useEffect(() => {
+    if (companionName === null) return; // wait until profile loaded
+
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      // Cancel any existing speech
       window.speechSynthesis.cancel();
 
-      const utterance = new SpeechSynthesisUtterance(
-        "Someone who believes in you is working for you right now."
-      );
+      const voiceLine = companionType && companionName
+        ? (COMPANION_VOICE_LINES[companionType]?.(companionName) || `${companionName} is working for you right now.`)
+        : "Someone who believes in you is working for you right now.";
 
-      // Try to get a good voice
+      const utterance = new SpeechSynthesisUtterance(voiceLine);
+
       const setVoice = () => {
         const voices = window.speechSynthesis.getVoices();
-        // Prefer a warm English voice
-        const preferred = voices.find(v =>
-          v.name.includes("Daniel") ||
-          v.name.includes("Arthur") ||
-          v.name.includes("Google UK English Male") ||
-          v.name.includes("Microsoft George") ||
-          v.name.includes("Alex") ||
-          (v.lang === "en-GB" && !v.name.toLowerCase().includes("female"))
-        );
+        const isFemale = companionType && COMPANION_FEMALE.includes(companionType);
+
+        const preferred = isFemale
+          ? voices.find(v =>
+              v.name.includes("Samantha") ||
+              v.name.includes("Google UK English Female") ||
+              v.name.includes("Microsoft Hazel") ||
+              v.name.includes("Victoria") ||
+              (v.lang?.startsWith("en") && v.name.toLowerCase().includes("female"))
+            )
+          : voices.find(v =>
+              v.name.includes("Daniel") ||
+              v.name.includes("Arthur") ||
+              v.name.includes("Google UK English Male") ||
+              v.name.includes("Microsoft George") ||
+              v.name.includes("Alex") ||
+              (v.lang?.startsWith("en") && !v.name.toLowerCase().includes("female"))
+            );
+
         if (preferred) utterance.voice = preferred;
         utterance.rate = 0.88;
-        utterance.pitch = 0.95;
+        utterance.pitch = isFemale ? 1.05 : 0.92;
         utterance.volume = 1;
         window.speechSynthesis.speak(utterance);
       };
 
-      // Voices may not be loaded yet
       if (window.speechSynthesis.getVoices().length > 0) {
         setVoice();
       } else {
@@ -40,27 +92,28 @@ export function DadLoading({ message = "Just a moment..." }: { message?: string 
       }
     }
 
-    // Cancel speech when component unmounts
     return () => {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
     };
-  }, []);
+  }, [companionName, companionType]);
+
+  const displayLine = companionType && companionName
+    ? COMPANION_VOICE_LINES[companionType]?.(companionName) || `${companionName} is working for you right now.`
+    : "Someone who believes in you is working for you right now.";
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#0a0a0a",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        fontFamily: "'Georgia', serif",
-      }}
-    >
+    <div style={{
+      minHeight: "100vh",
+      background: "#0a0a0a",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px",
+      fontFamily: "'Georgia', serif",
+    }}>
       <style>{`
         @keyframes dadWalk {
           0%   { transform: translateX(-80px); }
@@ -97,101 +150,71 @@ export function DadLoading({ message = "Just a moment..." }: { message?: string 
         .wave-bar-5 { animation: soundWave 1s ease-in-out infinite; animation-delay: 0.6s; }
       `}</style>
 
-      {/* Outer glow ring */}
+      {/* Glow ring */}
       <div style={{
-        width: 160,
-        height: 160,
-        borderRadius: "50%",
+        width: 160, height: 160, borderRadius: "50%",
         background: "rgba(212,160,80,0.04)",
         border: "1px solid rgba(212,160,80,0.15)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        display: "flex", alignItems: "center", justifyContent: "center",
         marginBottom: 48,
         animation: "glow 3s ease-in-out infinite",
         position: "relative",
       }}>
-        {/* Inner ring */}
         <div style={{
-          width: 120,
-          height: 120,
-          borderRadius: "50%",
+          width: 120, height: 120, borderRadius: "50%",
           background: "rgba(212,160,80,0.06)",
           border: "1px solid rgba(212,160,80,0.25)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          display: "flex", alignItems: "center", justifyContent: "center",
         }}>
           <div style={{
             fontSize: "2.8rem",
             animation: "dadWalk 2s ease-in-out infinite",
-            display: "inline-block",
-            lineHeight: 1,
+            display: "inline-block", lineHeight: 1,
           }}>
             🏃
           </div>
         </div>
-
-        {/* Orbiting dot */}
         <div style={{
-          position: "absolute",
-          top: 8,
-          right: 12,
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
+          position: "absolute", top: 8, right: 12,
+          width: 10, height: 10, borderRadius: "50%",
           background: "#d4a050",
           animation: "pulse 2s ease-in-out infinite",
         }} />
       </div>
 
-      {/* Main message */}
+      {/* Text */}
       <div style={{
-        textAlign: "center",
-        maxWidth: 440,
+        textAlign: "center", maxWidth: 480,
         animation: "fadeUp 0.8s ease both",
       }}>
         <p style={{
-          fontSize: "clamp(1.1rem, 3vw, 1.4rem)",
-          fontWeight: 400,
-          fontStyle: "italic",
-          lineHeight: 1.7,
-          marginBottom: 16,
-          background: "linear-gradient(90deg, #b8863c 0%, #d4a050 30%, #f5d48a 50%, #d4a050 70%, #b8863c 100%)",
+          fontSize: "clamp(1rem, 3vw, 1.35rem)",
+          fontWeight: 400, fontStyle: "italic",
+          lineHeight: 1.7, marginBottom: 16,
+          background: "linear-gradient(90deg,#b8863c 0%,#d4a050 30%,#f5d48a 50%,#d4a050 70%,#b8863c 100%)",
           backgroundSize: "300% auto",
           WebkitBackgroundClip: "text",
           WebkitTextFillColor: "transparent",
           backgroundClip: "text",
           animation: "shimmer 4s linear infinite",
         }}>
-          "Someone who believes in you<br />is working for you right now."
+          "{displayLine}"
         </p>
 
-        {/* Sound wave — shows DAD is speaking */}
+        {/* Sound wave */}
         <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 4,
-          marginBottom: 20,
-          height: 24,
+          display: "flex", alignItems: "center",
+          justifyContent: "center", gap: 4,
+          marginBottom: 20, height: 24,
         }}>
           {["wave-bar-1","wave-bar-2","wave-bar-3","wave-bar-4","wave-bar-5"].map((cls, i) => (
-            <div
-              key={i}
-              className={cls}
-              style={{
-                width: 3,
-                height: 20,
-                borderRadius: 999,
-                background: "#d4a050",
-                transformOrigin: "center",
-              }}
-            />
+            <div key={i} className={cls} style={{
+              width: 3, height: 20, borderRadius: 999,
+              background: "#d4a050", transformOrigin: "center",
+            }} />
           ))}
         </div>
 
-        {/* Dynamic message */}
         <p style={{
           fontSize: "0.78rem",
           color: "rgba(255,255,255,0.25)",
@@ -203,7 +226,6 @@ export function DadLoading({ message = "Just a moment..." }: { message?: string 
           {message}
         </p>
 
-        {/* Three dots */}
         <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
           <div className="dad-dot-1" style={{ width: 6, height: 6, borderRadius: "50%", background: "#d4a050" }} />
           <div className="dad-dot-2" style={{ width: 6, height: 6, borderRadius: "50%", background: "#d4a050" }} />
@@ -211,15 +233,11 @@ export function DadLoading({ message = "Just a moment..." }: { message?: string 
         </div>
       </div>
 
-      {/* Bottom brand line */}
       <div style={{
-        position: "absolute",
-        bottom: 40,
-        fontFamily: "sans-serif",
-        fontSize: "0.65rem",
+        position: "absolute", bottom: 40,
+        fontFamily: "sans-serif", fontSize: "0.65rem",
         color: "rgba(255,255,255,0.12)",
-        letterSpacing: "0.2em",
-        textTransform: "uppercase",
+        letterSpacing: "0.2em", textTransform: "uppercase",
       }}>
         DAD · Your career guide
       </div>
