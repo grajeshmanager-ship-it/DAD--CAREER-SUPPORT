@@ -3,10 +3,6 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-interface DadLoadingProps {
-  message?: string;
-}
-
 const COMPANION_VOICE_LINES: Record<string, (name: string) => string> = {
   dad: (name) => `${name} is working for you right now. He believes in you.`,
   mom: (name) => `${name} is working for you right now. She believes in you.`,
@@ -21,87 +17,101 @@ const COMPANION_VOICE_LINES: Record<string, (name: string) => string> = {
 
 const COMPANION_FEMALE = ["mom", "sister", "partner"];
 
-export function DadLoading({ message = "Just a moment..." }: DadLoadingProps) {
-  const [companionName, setCompanionName] = useState<string | null>(null);
-  const [companionType, setCompanionType] = useState<string | null>(null);
+function speakLine(line: string, isFemale: boolean) {
+  if (typeof window === "undefined") return;
+  if (!("speechSynthesis" in window)) return;
+
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(line);
+  utterance.rate = 0.88;
+  utterance.pitch = isFemale ? 1.05 : 0.92;
+  utterance.volume = 1;
+
+  const trySpeak = () => {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0) return false;
+
+    const preferred = isFemale
+      ? voices.find(v =>
+          v.name.includes("Samantha") ||
+          v.name.includes("Google UK English Female") ||
+          v.name.includes("Microsoft Hazel") ||
+          v.name.includes("Victoria") ||
+          (v.lang?.startsWith("en") && v.name.toLowerCase().includes("female"))
+        )
+      : voices.find(v =>
+          v.name.includes("Daniel") ||
+          v.name.includes("Arthur") ||
+          v.name.includes("Google UK English Male") ||
+          v.name.includes("Microsoft George") ||
+          v.name.includes("Alex") ||
+          (v.lang?.startsWith("en") && !v.name.toLowerCase().includes("female"))
+        );
+
+    if (preferred) utterance.voice = preferred;
+    window.speechSynthesis.speak(utterance);
+    return true;
+  };
+
+  if (!trySpeak()) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      trySpeak();
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }
+}
+
+export function DadLoading({ message = "Just a moment..." }: { message?: string }) {
+  const [displayLine, setDisplayLine] = useState("Someone who believes in you is working for you right now.");
 
   useEffect(() => {
-    const loadProfile = async () => {
+    let cancelled = false;
+
+    const load = async () => {
+      // First speak the default line immediately
+      speakLine("Someone who believes in you is working for you right now.", false);
+
+      // Then try to get personalised profile
       try {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user || cancelled) return;
+
         const { data } = await supabase
           .from("profiles")
           .select("companion_name, companion_type")
           .eq("id", user.id)
           .single();
-        if (data?.companion_name) setCompanionName(data.companion_name);
-        if (data?.companion_type) setCompanionType(data.companion_type);
+
+        if (cancelled) return;
+
+        if (data?.companion_name && data?.companion_type) {
+          const line = COMPANION_VOICE_LINES[data.companion_type]?.(data.companion_name)
+            || `${data.companion_name} is working for you right now.`;
+          const isFemale = COMPANION_FEMALE.includes(data.companion_type);
+
+          setDisplayLine(line);
+
+          // Speak personalised version after a short delay
+          setTimeout(() => {
+            if (!cancelled) speakLine(line, isFemale);
+          }, 500);
+        }
       } catch {
-        // silently fail — fallback to default
+        // silently fall back to default
       }
     };
-    loadProfile();
-  }, []);
 
-  useEffect(() => {
-    if (companionName === null) return; // wait until profile loaded
-
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-
-      const voiceLine = companionType && companionName
-        ? (COMPANION_VOICE_LINES[companionType]?.(companionName) || `${companionName} is working for you right now.`)
-        : "Someone who believes in you is working for you right now.";
-
-      const utterance = new SpeechSynthesisUtterance(voiceLine);
-
-      const setVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const isFemale = companionType && COMPANION_FEMALE.includes(companionType);
-
-        const preferred = isFemale
-          ? voices.find(v =>
-              v.name.includes("Samantha") ||
-              v.name.includes("Google UK English Female") ||
-              v.name.includes("Microsoft Hazel") ||
-              v.name.includes("Victoria") ||
-              (v.lang?.startsWith("en") && v.name.toLowerCase().includes("female"))
-            )
-          : voices.find(v =>
-              v.name.includes("Daniel") ||
-              v.name.includes("Arthur") ||
-              v.name.includes("Google UK English Male") ||
-              v.name.includes("Microsoft George") ||
-              v.name.includes("Alex") ||
-              (v.lang?.startsWith("en") && !v.name.toLowerCase().includes("female"))
-            );
-
-        if (preferred) utterance.voice = preferred;
-        utterance.rate = 0.88;
-        utterance.pitch = isFemale ? 1.05 : 0.92;
-        utterance.volume = 1;
-        window.speechSynthesis.speak(utterance);
-      };
-
-      if (window.speechSynthesis.getVoices().length > 0) {
-        setVoice();
-      } else {
-        window.speechSynthesis.onvoiceschanged = setVoice;
-      }
-    }
+    load();
 
     return () => {
+      cancelled = true;
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
     };
-  }, [companionName, companionType]);
-
-  const displayLine = companionType && companionName
-    ? COMPANION_VOICE_LINES[companionType]?.(companionName) || `${companionName} is working for you right now.`
-    : "Someone who believes in you is working for you right now.";
+  }, []);
 
   return (
     <div style={{
