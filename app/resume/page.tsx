@@ -106,6 +106,12 @@ export default function ResumePage() {
     return currency + " ";
   };
 
+  const openUrl = (url: string) => {
+    if (typeof window !== "undefined") {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-50">
@@ -331,14 +337,12 @@ export default function ResumePage() {
                           </p>
                         </div>
                         {c.url && c.url !== "#" && (
-                          
-                            href={c.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() => openUrl(c.url)}
                             className="text-xs text-primary hover:underline flex-shrink-0"
                           >
                             View →
-                          </a>
+                          </button>
                         )}
                       </div>
                     </div>
