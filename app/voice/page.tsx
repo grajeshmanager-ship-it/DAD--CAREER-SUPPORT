@@ -81,7 +81,6 @@ export default function VoicePage() {
   const [muted, setMuted] = useState(false);
   const [greeting, setGreeting] = useState("");
   const [callDuration, setCallDuration] = useState(0);
-  const [vapiLoaded, setVapiLoaded] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [vapi, setVapi] = useState<any>(null);
 
@@ -94,18 +93,6 @@ export default function VoicePage() {
       if (data) setProfile(data);
     };
     loadProfile();
-  }, []);
-
-  useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.js";
-    script.onload = () => setVapiLoaded(true);
-    document.head.appendChild(script);
-    return () => {
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -137,19 +124,36 @@ export default function VoicePage() {
     const selectedGreeting = getGreeting();
     setGreeting(selectedGreeting);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    if (vapiLoaded && w.Vapi && process.env.NEXT_PUBLIC_VAPI_KEY) {
-      try {
-        const vapiInstance = new w.Vapi(process.env.NEXT_PUBLIC_VAPI_KEY);
-        vapiInstance.on("call-start", () => setCallActive(true));
-        vapiInstance.on("call-end", () => { setCallActive(false); setVapi(null); });
-        vapiInstance.on("error", () => setCallActive(false));
-        await vapiInstance.start({
-          model: {
-            provider: "anthropic",
-            model: "claude-sonnet-4-6",
-            systemPrompt: `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey.
+    const vapiKey = process.env.NEXT_PUBLIC_VAPI_KEY;
+
+    if (!vapiKey) {
+      setCallActive(true);
+      return;
+    }
+
+    try {
+      // Dynamically import Vapi
+      const { default: Vapi } = await import("@vapi-ai/web");
+      const vapiInstance = new Vapi(vapiKey);
+
+      vapiInstance.on("call-start", () => setCallActive(true));
+      vapiInstance.on("call-end", () => {
+        setCallActive(false);
+        setVapi(null);
+      });
+      vapiInstance.on("error", (e: unknown) => {
+        console.error("Vapi error:", e);
+        setCallActive(false);
+      });
+
+      await vapiInstance.start({
+        model: {
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          messages: [
+            {
+              role: "system",
+              content: `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey.
 
 Your personality: warm, honest, genuinely caring, direct when needed. You remember this person and care about their success.
 
@@ -165,20 +169,24 @@ Your role:
 - Speak naturally, like a real ${COMPANION_LABELS[companionType]} would
 
 Start with: "${selectedGreeting}"`,
-          },
-          voice: {
-            provider: "11labs",
-            voiceId: companionType === "mom" || companionType === "sister" || companionType === "partner"
+            },
+          ],
+        },
+        voice: {
+          provider: "11labs",
+          voiceId:
+            companionType === "mom" ||
+            companionType === "sister" ||
+            companionType === "partner"
               ? "EXAVITQu4vr4xnSDxMaL"
               : "pNInz6obpgDQGcFmaJgB",
-          },
-          firstMessage: selectedGreeting,
-        });
-        setVapi(vapiInstance);
-      } catch {
-        setCallActive(true);
-      }
-    } else {
+        },
+        firstMessage: selectedGreeting,
+      });
+
+      setVapi(vapiInstance);
+    } catch (err) {
+      console.error("Failed to start Vapi call:", err);
       setCallActive(true);
     }
   };
@@ -230,7 +238,9 @@ Start with: "${selectedGreeting}"`,
             </div>
 
             <Card className="p-6 border border-border bg-card/50 text-left space-y-3">
-              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">What you can talk about</p>
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                What you can talk about
+              </p>
               {[
                 "Your job search strategy",
                 "CV and application feedback",
@@ -245,7 +255,11 @@ Start with: "${selectedGreeting}"`,
               ))}
             </Card>
 
-            <Button onClick={startCall} size="lg" className="w-full rounded-full text-lg py-6 gap-3">
+            <Button
+              onClick={startCall}
+              size="lg"
+              className="w-full rounded-full text-lg py-6 gap-3"
+            >
               <Phone className="w-5 h-5" />
               Call {companionName}
             </Button>
@@ -271,7 +285,9 @@ Start with: "${selectedGreeting}"`,
 
             <div>
               <h2 className="text-2xl font-bold mb-1">{companionName}</h2>
-              <p className="text-primary text-sm font-medium">● On call · {formatDuration(callDuration)}</p>
+              <p className="text-primary text-sm font-medium">
+                ● On call · {formatDuration(callDuration)}
+              </p>
             </div>
 
             {greeting && (
@@ -306,7 +322,10 @@ Start with: "${selectedGreeting}"`,
         )}
 
         <div className="mt-12 text-center">
-          <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2">
+          <Link
+            href="/dashboard"
+            className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-2"
+          >
             <ArrowLeft className="w-4 h-4" /> Back to Dashboard
           </Link>
         </div>
