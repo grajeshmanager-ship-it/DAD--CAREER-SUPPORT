@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, MicOff, Phone, PhoneOff, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import Vapi from "@vapi-ai/web";
 
 interface Profile {
   full_name: string;
@@ -81,8 +82,8 @@ export default function VoicePage() {
   const [muted, setMuted] = useState(false);
   const [greeting, setGreeting] = useState("");
   const [callDuration, setCallDuration] = useState(0);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [vapi, setVapi] = useState<any>(null);
+  const [status, setStatus] = useState("");
+  const vapiRef = useRef<Vapi | null>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -109,6 +110,15 @@ export default function VoicePage() {
     return () => clearInterval(interval);
   }, [callActive]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (vapiRef.current) {
+        vapiRef.current.stop();
+      }
+    };
+  }, []);
+
   const formatDuration = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;
@@ -122,37 +132,60 @@ export default function VoicePage() {
   };
 
   const startCall = async () => {
+    const vapiKey = process.env.NEXT_PUBLIC_VAPI_KEY;
+    if (!vapiKey) {
+      setStatus("Vapi key not configured");
+      return;
+    }
+
     const companionType = profile?.companion_type || "dad";
     const companionName = profile?.companion_name || "DAD";
     const userName = profile?.full_name?.split(" ")[0] || "there";
     const selectedGreeting = getGreeting();
     setGreeting(selectedGreeting);
-
-    const vapiKey = process.env.NEXT_PUBLIC_VAPI_KEY;
-
-    if (!vapiKey) {
-      setCallActive(true);
-      return;
-    }
+    setStatus("Connecting...");
 
     try {
-      // Use dynamic import to avoid SSR issues and CDN problems
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const VapiModule = await import("@vapi-ai/web" as any);
-      const VapiClass = VapiModule.default || VapiModule.Vapi || VapiModule;
-      const vapiInstance = new VapiClass(vapiKey);
+      const vapiInstance = new Vapi(vapiKey);
+      vapiRef.current = vapiInstance;
 
-      vapiInstance.on("call-start", () => setCallActive(true));
+      vapiInstance.on("call-start", () => {
+        setCallActive(true);
+        setStatus("");
+      });
+
       vapiInstance.on("call-end", () => {
         setCallActive(false);
-        setVapi(null);
-      });
-      vapiInstance.on("error", (e: unknown) => {
-        console.error("Vapi error:", e);
-        setCallActive(false);
+        setStatus("");
+        vapiRef.current = null;
       });
 
-      const systemPrompt = `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey.
+      vapiInstance.on("error", (e) => {
+        console.error("Vapi error:", e);
+        setStatus("Connection failed. Please try again.");
+        setCallActive(false);
+        vapiRef.current = null;
+      });
+
+      const isFemaleVoice = companionType === "mom" ||
+        companionType === "sister" ||
+        companionType === "partner";
+
+      await vapiInstance.start({
+        name: `${companionName} - Career Guide`,
+        firstMessage: selectedGreeting,
+        transcriber: {
+          provider: "deepgram",
+          model: "nova-2",
+          language: "en",
+        },
+        model: {
+          provider: "anthropic",
+          model: "claude-3-5-sonnet-20241022",
+          messages: [
+            {
+              role: "system",
+              content: `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey.
 
 Your personality: warm, honest, genuinely caring, direct when needed. You remember this person and care about their success.
 
@@ -161,26 +194,11 @@ Context about ${userName}:
 - Country: ${profile?.country || "unknown"}
 
 Your role:
-- Give real, honest career advice — not generic platitudes
+- Give real, honest career advice
 - Ask questions to understand their specific situation
 - Be encouraging but truthful
 - Help with: CV advice, interview prep, job search strategy, career decisions, emotional support
-- Speak naturally, like a real ${COMPANION_LABELS[companionType]} would
-
-Start with: "${selectedGreeting}"`;
-
-      const isFemaleVoice = companionType === "mom" ||
-        companionType === "sister" ||
-        companionType === "partner";
-
-      await vapiInstance.start({
-        model: {
-          provider: "anthropic",
-          model: "claude-3-5-sonnet-20241022",
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
+- Speak naturally, like a real ${COMPANION_LABELS[companionType]} would`,
             },
           ],
         },
@@ -190,30 +208,31 @@ Start with: "${selectedGreeting}"`;
             ? "EXAVITQu4vr4xnSDxMaL"
             : "pNInz6obpgDQGcFmaJgB",
         },
-        firstMessage: selectedGreeting,
       });
 
-      setVapi(vapiInstance);
     } catch (err) {
-      console.error("Failed to start Vapi call:", err);
-      // Still show active UI so user knows something happened
-      setCallActive(true);
+      console.error("Failed to start call:", err);
+      setStatus("Failed to connect. Please check your internet and try again.");
+      setCallActive(false);
     }
   };
 
   const endCall = () => {
-    if (vapi) {
-      try { vapi.stop(); } catch { /* ignore */ }
+    if (vapiRef.current) {
+      try { vapiRef.current.stop(); } catch { /* ignore */ }
+      vapiRef.current = null;
     }
     setCallActive(false);
-    setVapi(null);
+    setStatus("");
   };
 
   const toggleMute = () => {
-    if (vapi) {
-      try { vapi.setMuted(!muted); } catch { /* ignore */ }
+    if (vapiRef.current) {
+      try {
+        vapiRef.current.setMuted(!muted);
+        setMuted(!muted);
+      } catch { /* ignore */ }
     }
-    setMuted(!muted);
   };
 
   const companionType = profile?.companion_type || "dad";
@@ -265,10 +284,15 @@ Start with: "${selectedGreeting}"`;
               ))}
             </Card>
 
+            {status && (
+              <p className="text-sm text-primary animate-pulse">{status}</p>
+            )}
+
             <Button
               onClick={startCall}
               size="lg"
               className="w-full rounded-full text-lg py-6 gap-3"
+              disabled={!!status}
             >
               <Phone className="w-5 h-5" />
               Call {companionName}
