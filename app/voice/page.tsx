@@ -89,7 +89,11 @@ export default function VoicePage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
       if (data) setProfile(data);
     };
     loadProfile();
@@ -132,9 +136,11 @@ export default function VoicePage() {
     }
 
     try {
-      // Dynamically import Vapi
-      const { default: Vapi } = await import("@vapi-ai/web");
-      const vapiInstance = new Vapi(vapiKey);
+      // Use dynamic import to avoid SSR issues and CDN problems
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const VapiModule = await import("@vapi-ai/web" as any);
+      const VapiClass = VapiModule.default || VapiModule.Vapi || VapiModule;
+      const vapiInstance = new VapiClass(vapiKey);
 
       vapiInstance.on("call-start", () => setCallActive(true));
       vapiInstance.on("call-end", () => {
@@ -146,14 +152,7 @@ export default function VoicePage() {
         setCallActive(false);
       });
 
-      await vapiInstance.start({
-        model: {
-          provider: "anthropic",
-          model: "claude-sonnet-4-6",
-          messages: [
-            {
-              role: "system",
-              content: `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey.
+      const systemPrompt = `You are ${companionName}, acting as ${userName}'s ${COMPANION_LABELS[companionType] || "guide"} in their career journey.
 
 Your personality: warm, honest, genuinely caring, direct when needed. You remember this person and care about their success.
 
@@ -168,18 +167,28 @@ Your role:
 - Help with: CV advice, interview prep, job search strategy, career decisions, emotional support
 - Speak naturally, like a real ${COMPANION_LABELS[companionType]} would
 
-Start with: "${selectedGreeting}"`,
+Start with: "${selectedGreeting}"`;
+
+      const isFemaleVoice = companionType === "mom" ||
+        companionType === "sister" ||
+        companionType === "partner";
+
+      await vapiInstance.start({
+        model: {
+          provider: "anthropic",
+          model: "claude-3-5-sonnet-20241022",
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
             },
           ],
         },
         voice: {
           provider: "11labs",
-          voiceId:
-            companionType === "mom" ||
-            companionType === "sister" ||
-            companionType === "partner"
-              ? "EXAVITQu4vr4xnSDxMaL"
-              : "pNInz6obpgDQGcFmaJgB",
+          voiceId: isFemaleVoice
+            ? "EXAVITQu4vr4xnSDxMaL"
+            : "pNInz6obpgDQGcFmaJgB",
         },
         firstMessage: selectedGreeting,
       });
@@ -187,6 +196,7 @@ Start with: "${selectedGreeting}"`,
       setVapi(vapiInstance);
     } catch (err) {
       console.error("Failed to start Vapi call:", err);
+      // Still show active UI so user knows something happened
       setCallActive(true);
     }
   };
