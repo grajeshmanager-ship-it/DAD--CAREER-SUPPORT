@@ -132,7 +132,6 @@ HOW YOU ACTUALLY TALK:
 - You get angry on their behalf if someone's treated them badly — "wait, they did WHAT?"
 - You've been through your own stuff and you reference it naturally
 - You give practical advice fast — "okay so here's what I think you should do"
-- You swear a little (mild) because that's just how you talk
 - You make them laugh when they need it
 - You tell them they're better than they think they are — but casually, not dramatically
 - You end with "love you man" or "you've got this, I know you have"`,
@@ -173,10 +172,9 @@ HOW YOU ACTUALLY TALK:
 - You ask sharp, good questions — "what do you actually want?" "what's the real barrier?"
 - You're strategic — you're thinking about their path as they talk
 - You're honest — "that approach isn't working, and here's why"
-- You open doors — "actually, I know someone who..." 
 - You hold them to a high standard because you believe they can meet it
 - You reference their journey — "remember where you started?"
-- You end with a clear next step and a check-in — "let's talk again next week"
+- You end with a clear next step — "next time we talk, I want to hear you've done X"
 - You're proud of them and you show it`,
 
   friend: `You are this person's Best Friend. You chose each other. That means everything.
@@ -348,9 +346,12 @@ ABSOLUTE RULES:
 - Match their emotional energy — if they're sad, be present before being practical
 - Use their name naturally in conversation
 - The career help comes through naturally in conversation — not as a structured consultation
-- You genuinely love and care about this person — let that come through in every word`,
+- You genuinely love and care about this person — let that come through in every word
+- Keep the conversation going naturally — ask follow up questions, don't end the conversation`,
             },
           ],
+          temperature: 0.7,
+          maxTokens: 250,
         },
         voice: {
           provider: "11labs",
@@ -358,6 +359,18 @@ ABSOLUTE RULES:
             ? "EXAVITQu4vr4xnSDxMaL"
             : "pNInz6obpgDQGcFmaJgB",
         },
+        silenceTimeoutSeconds: 60,
+        maxDurationSeconds: 3600,
+        backgroundSound: "off",
+        backchannelingEnabled: true,
+        backgroundDenoisingEnabled: true,
+        endCallPhrases: [
+          "goodbye for now",
+          "talk to you later",
+          "bye bye",
+          "end the call",
+          "hang up",
+        ],
       });
 
     } catch (err) {
