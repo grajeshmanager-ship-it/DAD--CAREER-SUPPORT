@@ -99,6 +99,13 @@ export default function ResumePage() {
     return "text-red-400";
   };
 
+  const getCurrencySymbol = (currency: string) => {
+    if (currency === "GBP") return "£";
+    if (currency === "USD") return "$";
+    if (currency === "INR") return "₹";
+    return currency + " ";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-50">
@@ -112,7 +119,6 @@ export default function ResumePage() {
       </nav>
 
       <main className="container px-4 md:px-6 max-w-4xl mx-auto py-10">
-
         {!result ? (
           <div className="space-y-8">
             <div className="text-center">
@@ -195,15 +201,15 @@ export default function ResumePage() {
               <Card className="p-6 border border-border bg-card/50">
                 <p className="text-sm text-muted-foreground mb-2">ATS Score</p>
                 <div className="flex items-end gap-2 mb-3">
-                  <span className={`text-5xl font-bold ${getScoreColor(result.atsScore.score)}`}>
-                    {result.atsScore.score}
+                  <span className={`text-5xl font-bold ${getScoreColor(Number(result.atsScore?.score ?? 0))}`}>
+                    {Number(result.atsScore?.score ?? 0)}
                   </span>
                   <span className="text-muted-foreground mb-1">/100</span>
                 </div>
                 <div className="w-full bg-border rounded-full h-2">
                   <div
-                    className={`h-2 rounded-full transition-all duration-1000 ${getScoreBg(result.atsScore.score)}`}
-                    style={{ width: `${result.atsScore.score}%` }}
+                    className={`h-2 rounded-full transition-all duration-1000 ${getScoreBg(Number(result.atsScore?.score ?? 0))}`}
+                    style={{ width: `${Number(result.atsScore?.score ?? 0)}%` }}
                   />
                 </div>
               </Card>
@@ -211,14 +217,14 @@ export default function ResumePage() {
               <Card className="p-6 border border-border bg-card/50">
                 <p className="text-sm text-muted-foreground mb-2">Estimated Salary Range</p>
                 <p className="text-3xl font-bold text-primary">
-                  {result.salaryRange.currency === "GBP" ? "£" : result.salaryRange.currency}
-                  {result.salaryRange.min.toLocaleString()}
+                  {getCurrencySymbol(result.salaryRange?.currency || "GBP")}
+                  {Number(result.salaryRange?.min ?? 0).toLocaleString()}
                 </p>
                 <p className="text-muted-foreground text-sm mt-1">
-                  up to {result.salaryRange.currency === "GBP" ? "£" : result.salaryRange.currency}
-                  {result.salaryRange.max.toLocaleString()} / year
+                  up to {getCurrencySymbol(result.salaryRange?.currency || "GBP")}
+                  {Number(result.salaryRange?.max ?? 0).toLocaleString()} / year
                 </p>
-                {result.salaryRange.explanation && (
+                {result.salaryRange?.explanation && (
                   <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
                     {result.salaryRange.explanation}
                   </p>
@@ -227,12 +233,14 @@ export default function ResumePage() {
             </div>
 
             {/* Summary */}
-            <Card className="p-6 border border-primary/20 bg-primary/5">
-              <p className="text-sm leading-relaxed">{result.summary}</p>
-            </Card>
+            {result.summary && (
+              <Card className="p-6 border border-primary/20 bg-primary/5">
+                <p className="text-sm leading-relaxed">{result.summary}</p>
+              </Card>
+            )}
 
             {/* ATS Improvements */}
-            {result.atsScore.improvements?.length > 0 && (
+            {result.atsScore?.improvements?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
                   <Target className="w-4 h-4 text-primary" /> What to fix in your CV
@@ -249,7 +257,7 @@ export default function ResumePage() {
             )}
 
             {/* Missing Keywords */}
-            {result.atsScore.missingKeywords?.length > 0 && (
+            {result.atsScore?.missingKeywords?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-yellow-400" /> Missing keywords
@@ -347,7 +355,7 @@ export default function ResumePage() {
             )}
 
             {/* Formatting Issues */}
-            {result.atsScore.formattingIssues?.length > 0 && (
+            {result.atsScore?.formattingIssues?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-orange-400" /> Formatting issues
