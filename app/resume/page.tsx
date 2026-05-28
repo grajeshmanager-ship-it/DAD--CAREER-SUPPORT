@@ -5,20 +5,51 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   Upload, FileText, CheckCircle, ArrowRight,
-  TrendingUp, Target, BookOpen, Briefcase, ArrowLeft
+  TrendingUp, Target, BookOpen, Briefcase, ArrowLeft, AlertCircle
 } from "lucide-react";
 import Link from "next/link";
 import { DadLoading } from "@/components/ui/dad-loading";
 
+interface SkillGap {
+  skill: string;
+  rating: string;
+  explanation: string;
+}
+
+interface JobMatch {
+  title: string;
+  demandLevel: string;
+  averageSalary: string;
+}
+
+interface Course {
+  name: string;
+  provider: string;
+  url: string;
+  skillAddressed: string;
+}
+
+interface AtsScore {
+  score: number;
+  missingKeywords: string[];
+  formattingIssues: string[];
+  improvements: { title: string; description: string }[];
+}
+
+interface SalaryRange {
+  min: number;
+  max: number;
+  currency: string;
+  explanation: string;
+}
+
 interface AnalysisResult {
-  atsScore: number;
-  salaryRange: { min: number; max: number; currency: string };
-  skillGaps: string[];
-  strengths: string[];
-  improvements: string[];
-  jobMatches: { title: string; match: number }[];
-  courses: { name: string; provider: string; reason: string }[];
   summary: string;
+  skillGaps: SkillGap[];
+  salaryRange: SalaryRange;
+  jobMatches: JobMatch[];
+  courses: Course[];
+  atsScore: AtsScore;
 }
 
 export default function ResumePage() {
@@ -50,11 +81,29 @@ export default function ResumePage() {
 
   if (loading) return <DadLoading message="DAD is reading your resume..." />;
 
+  const getScoreColor = (score: number) =>
+    score >= 75 ? "text-green-400" : score >= 50 ? "text-yellow-400" : "text-red-400";
+
+  const getScoreBg = (score: number) =>
+    score >= 75 ? "bg-green-400" : score >= 50 ? "bg-yellow-400" : "bg-red-400";
+
+  const getRatingColor = (rating: string) => {
+    if (rating === "High") return "text-red-400 bg-red-500/10 border-red-500/20";
+    if (rating === "Mid") return "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
+    return "text-green-400 bg-green-500/10 border-green-500/20";
+  };
+
+  const getDemandColor = (demand: string) => {
+    if (demand === "High") return "text-green-400";
+    if (demand === "Medium") return "text-yellow-400";
+    return "text-red-400";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <div className="container px-4 md:px-6 max-w-4xl mx-auto flex items-center justify-between h-16">
-          <Link href="/dashboard" className="flex items-center gap-2 text-primary font-bold text-2xl">DAD</Link>
+          <Link href="/dashboard" className="text-2xl font-bold text-primary">DAD</Link>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FileText className="w-4 h-4" />
             <span>Resume Review</span>
@@ -76,7 +125,9 @@ export default function ResumePage() {
             <Card className="p-8 border border-border bg-card/50">
               <div
                 className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-200 ${
-                  file ? "border-primary/50 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-primary/5"
+                  file
+                    ? "border-primary/50 bg-primary/5"
+                    : "border-border hover:border-primary/40 hover:bg-primary/5"
                 }`}
                 onClick={() => document.getElementById("resume-file")?.click()}
                 onDragOver={(e) => e.preventDefault()}
@@ -89,7 +140,7 @@ export default function ResumePage() {
                 <input
                   id="resume-file"
                   type="file"
-                  accept=".pdf,.doc,.docx,.txt"
+                  accept=".pdf"
                   className="hidden"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                 />
@@ -105,12 +156,17 @@ export default function ResumePage() {
                   <div className="space-y-3">
                     <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
                     <p className="font-semibold text-lg">Drop your resume here</p>
-                    <p className="text-sm text-muted-foreground">PDF, DOC, DOCX, TXT supported · Click to browse</p>
+                    <p className="text-sm text-muted-foreground">PDF only · Click to browse</p>
                   </div>
                 )}
               </div>
 
-              {error && <p className="text-sm text-destructive mt-4 text-center">{error}</p>}
+              {error && (
+                <div className="flex items-center gap-2 mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
 
               <Button
                 onClick={handleUpload}
@@ -125,30 +181,29 @@ export default function ResumePage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="flex items-center gap-3 mb-8">
-              <Button variant="outline" size="sm" onClick={() => setResult(null)} className="rounded-full gap-2">
-                <ArrowLeft className="w-4 h-4" /> Upload another
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setResult(null); setFile(null); }}
+              className="rounded-full gap-2 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" /> Upload another
+            </Button>
 
-            {/* ATS Score */}
+            {/* ATS Score + Salary */}
             <div className="grid md:grid-cols-2 gap-4">
               <Card className="p-6 border border-border bg-card/50">
                 <p className="text-sm text-muted-foreground mb-2">ATS Score</p>
-                <div className="flex items-end gap-2">
-                  <span className={`text-5xl font-bold ${
-                    result.atsScore >= 75 ? "text-green-400" :
-                    result.atsScore >= 50 ? "text-yellow-400" : "text-red-400"
-                  }`}>{result.atsScore}</span>
+                <div className="flex items-end gap-2 mb-3">
+                  <span className={`text-5xl font-bold ${getScoreColor(result.atsScore.score)}`}>
+                    {result.atsScore.score}
+                  </span>
                   <span className="text-muted-foreground mb-1">/100</span>
                 </div>
-                <div className="w-full bg-border rounded-full h-2 mt-3">
+                <div className="w-full bg-border rounded-full h-2">
                   <div
-                    className={`h-2 rounded-full transition-all duration-1000 ${
-                      result.atsScore >= 75 ? "bg-green-400" :
-                      result.atsScore >= 50 ? "bg-yellow-400" : "bg-red-400"
-                    }`}
-                    style={{ width: `${result.atsScore}%` }}
+                    className={`h-2 rounded-full transition-all duration-1000 ${getScoreBg(result.atsScore.score)}`}
+                    style={{ width: `${result.atsScore.score}%` }}
                   />
                 </div>
               </Card>
@@ -156,11 +211,18 @@ export default function ResumePage() {
               <Card className="p-6 border border-border bg-card/50">
                 <p className="text-sm text-muted-foreground mb-2">Estimated Salary Range</p>
                 <p className="text-3xl font-bold text-primary">
-                  {result.salaryRange.currency}{result.salaryRange.min.toLocaleString()}
+                  {result.salaryRange.currency === "GBP" ? "£" : result.salaryRange.currency}
+                  {result.salaryRange.min.toLocaleString()}
                 </p>
                 <p className="text-muted-foreground text-sm mt-1">
-                  up to {result.salaryRange.currency}{result.salaryRange.max.toLocaleString()} / year
+                  up to {result.salaryRange.currency === "GBP" ? "£" : result.salaryRange.currency}
+                  {result.salaryRange.max.toLocaleString()} / year
                 </p>
+                {result.salaryRange.explanation && (
+                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                    {result.salaryRange.explanation}
+                  </p>
+                )}
               </Card>
             </div>
 
@@ -169,46 +231,59 @@ export default function ResumePage() {
               <p className="text-sm leading-relaxed">{result.summary}</p>
             </Card>
 
-            {/* Strengths & Improvements */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card className="p-5 border border-green-500/20 bg-green-500/5">
-                <h3 className="font-semibold text-green-400 flex items-center gap-2 mb-3">
-                  <CheckCircle className="w-4 h-4" /> What's working
+            {/* ATS Improvements */}
+            {result.atsScore.improvements?.length > 0 && (
+              <Card className="p-5 border border-border bg-card/50">
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
+                  <Target className="w-4 h-4 text-primary" /> What to fix in your CV
                 </h3>
-                <ul className="space-y-2">
-                  {result.strengths?.map((s, i) => (
-                    <li key={i} className="text-sm flex gap-2">
-                      <span className="text-green-400 mt-0.5">•</span>{s}
-                    </li>
+                <div className="space-y-3">
+                  {result.atsScore.improvements.map((imp, i) => (
+                    <div key={i} className="p-3 bg-red-500/5 border border-red-500/15 rounded-lg">
+                      <p className="text-sm font-medium text-red-400 mb-1">{imp.title}</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{imp.description}</p>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </Card>
+            )}
 
-              <Card className="p-5 border border-red-500/20 bg-red-500/5">
-                <h3 className="font-semibold text-red-400 flex items-center gap-2 mb-3">
-                  <Target className="w-4 h-4" /> What to fix
+            {/* Missing Keywords */}
+            {result.atsScore.missingKeywords?.length > 0 && (
+              <Card className="p-5 border border-border bg-card/50">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-yellow-400" /> Missing keywords
                 </h3>
-                <ul className="space-y-2">
-                  {result.improvements?.map((s, i) => (
-                    <li key={i} className="text-sm flex gap-2">
-                      <span className="text-red-400 mt-0.5">•</span>{s}
-                    </li>
+                <p className="text-xs text-muted-foreground mb-3">Add these to your CV to pass ATS filters:</p>
+                <div className="flex flex-wrap gap-2">
+                  {result.atsScore.missingKeywords.map((kw, i) => (
+                    <span key={i} className="text-xs bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-full px-3 py-1">
+                      {kw}
+                    </span>
                   ))}
-                </ul>
+                </div>
               </Card>
-            </div>
+            )}
 
             {/* Skill Gaps */}
             {result.skillGaps?.length > 0 && (
               <Card className="p-5 border border-border bg-card/50">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <h3 className="font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-primary" /> Skill gaps to close
                 </h3>
-                <div className="flex flex-wrap gap-2">
-                  {result.skillGaps.map((s, i) => (
-                    <span key={i} className="text-xs bg-secondary text-secondary-foreground rounded-full px-3 py-1">
-                      {s}
-                    </span>
+                <div className="space-y-3">
+                  {result.skillGaps.map((gap, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 bg-secondary/50 rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm font-medium">{gap.skill}</p>
+                          <span className={`text-xs border rounded-full px-2 py-0.5 ${getRatingColor(gap.rating)}`}>
+                            {gap.rating} priority
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{gap.explanation}</p>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </Card>
@@ -221,18 +296,17 @@ export default function ResumePage() {
                   <Briefcase className="w-4 h-4 text-primary" /> Best job matches
                 </h3>
                 <div className="space-y-3">
-                  {result.jobMatches.map((j, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <span className="text-sm">{j.title}</span>
-                      <div className="flex items-center gap-3">
-                        <div className="w-32 bg-border rounded-full h-1.5">
-                          <div
-                            className="bg-primary h-1.5 rounded-full"
-                            style={{ width: `${j.match}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground w-8">{j.match}%</span>
+                  {result.jobMatches.map((job, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">{job.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Avg salary: {job.averageSalary}
+                        </p>
                       </div>
+                      <span className={`text-xs font-medium ${getDemandColor(job.demandLevel)}`}>
+                        {job.demandLevel} demand
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -248,16 +322,52 @@ export default function ResumePage() {
                 <div className="space-y-3">
                   {result.courses.map((c, i) => (
                     <div key={i} className="p-3 bg-secondary/50 rounded-lg">
-                      <p className="text-sm font-medium">{c.name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{c.provider} · {c.reason}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">{c.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {c.provider} · Builds: {c.skillAddressed}
+                          </p>
+                        </div>
+                        {c.url && c.url !== "#" && (
+                          
+                            href={c.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline flex-shrink-0"
+                          >
+                            View →
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               </Card>
             )}
 
+            {/* Formatting Issues */}
+            {result.atsScore.formattingIssues?.length > 0 && (
+              <Card className="p-5 border border-border bg-card/50">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-orange-400" /> Formatting issues
+                </h3>
+                <ul className="space-y-2">
+                  {result.atsScore.formattingIssues.map((issue, i) => (
+                    <li key={i} className="text-sm flex gap-2 text-muted-foreground">
+                      <span className="text-orange-400 mt-0.5">•</span>{issue}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+
             <div className="flex gap-3 pt-4">
-              <Button variant="outline" onClick={() => setResult(null)} className="flex-1 rounded-full">
+              <Button
+                variant="outline"
+                onClick={() => { setResult(null); setFile(null); }}
+                className="flex-1 rounded-full"
+              >
                 Analyse Another Resume
               </Button>
               <Link href="/interview" className="flex-1">
