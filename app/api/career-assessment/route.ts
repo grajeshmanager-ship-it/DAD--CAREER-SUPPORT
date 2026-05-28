@@ -5,60 +5,77 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    const { situation, education, experience, interests, skills, goals, country } = await request.json();
+    const body = await request.json();
+    const {
+      situation, education, experience, interests,
+      skills, goals, country, situationContext,
+      graduationDate, applied, whyLeaving, breakReason, concerns
+    } = body;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "API key not configured" }, { status: 500 });
 
-    const prompt = `You are DAD — a deeply knowledgeable, honest, and caring career advisor. A person has shared their background with you. Give them a genuinely personalised, honest career assessment.
+    const prompt = `You are DAD — a deeply knowledgeable, honest, and caring career advisor. A person has shared their full situation with you. Give them a genuinely personalised, honest career assessment.
 
-PERSON'S DETAILS:
-- Situation: ${situation}
+SITUATION TYPE: ${situation}
+SPECIAL CONTEXT FOR THIS SITUATION:
+${situationContext}
+
+PERSON'S FULL DETAILS:
 - Education: ${education}
-- Experience: ${experience || "None"}
+- Country they want to work in: ${country}
+- Work experience: ${experience || "None"}
+- Graduation date: ${graduationDate || "N/A"}
+- Application history: ${applied || "N/A"}
+- Why leaving current career: ${whyLeaving || "N/A"}
+- Career break reason/duration: ${breakReason || "N/A"}
 - Interests: ${interests}
 - Skills: ${skills || "None listed"}
-- Career goals: ${goals}
-- Country: ${country}
+- Career goals/constraints: ${goals}
+- Biggest concerns: ${concerns || "Not specified"}
 
-Return ONLY valid JSON in this exact shape:
+CRITICAL INSTRUCTIONS:
+- Use the situation context above to shape your entire response
+- Be specific to THIS person's exact background — no generic advice
+- Be honest. If something is unrealistic, say so with a better alternative
+- Salary ranges must reflect the country they want to work in
+- The action plan must be tailored to their specific situation type
+
+Return ONLY valid JSON:
 {
-  "recommendedPath": "Clear career path name e.g. 'Product Management' or 'Data Analytics'",
-  "reasoning": "2-3 honest sentences explaining exactly why this path suits them based on their specific background",
+  "recommendedPath": "Specific career path name",
+  "reasoning": "2-3 honest sentences explaining exactly why this path suits them based on their specific background and situation",
   "topRoles": [
     {
       "title": "Job title",
-      "description": "One sentence on what this role involves day to day",
-      "salaryRange": "e.g. £35k-£55k or $50k-$80k based on their country"
+      "description": "One sentence on day-to-day reality of this role",
+      "salaryRange": "Realistic range for their country e.g. £28k-£40k"
     }
   ],
   "skillsToLearn": ["skill1", "skill2", "skill3", "skill4", "skill5"],
   "actionPlan": [
     {
       "step": "Short step title",
-      "timeframe": "e.g. Week 1-2",
-      "description": "Specific, actionable description of what to do"
+      "timeframe": "Specific timeframe e.g. This week, Month 1-2, Within 3 months",
+      "description": "Specific, actionable, tailored to their situation"
     }
   ],
   "courses": [
     {
-      "name": "Course name",
-      "provider": "Coursera / Udemy / LinkedIn Learning etc",
-      "reason": "Why this specific course for this person"
+      "name": "Specific course name",
+      "provider": "Coursera / Udemy / LinkedIn Learning / FutureLearn etc",
+      "reason": "Why THIS course for THIS person specifically"
     }
   ],
-  "encouragement": "One warm, honest sentence from DAD — not generic, specific to their situation"
+  "encouragement": "One warm but honest sentence from DAD — specific to their situation, not generic"
 }
 
 Rules:
-- Be honest. If their background doesn't match their goals, say so kindly but clearly.
-- Be specific. Use their actual details, not generic advice.
-- topRoles: exactly 3 roles
-- skillsToLearn: exactly 5-6 skills
-- actionPlan: exactly 5 steps with realistic timeframes
-- courses: exactly 3-4 courses
-- Salary ranges should reflect the country they want to work in
-- Return ONLY the JSON, no other text`;
+- topRoles: exactly 3
+- skillsToLearn: exactly 5-6
+- actionPlan: exactly 5 steps, situation-appropriate
+- courses: exactly 3-4
+- Return ONLY the JSON`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
