@@ -132,9 +132,23 @@ Return ONLY the JSON object.`;
       );
     }
 
-    analysis.resumeText = resumeText;
+// Flatten atsScore to prevent React rendering object error
+    const flatAnalysis = {
+      summary: analysis.summary || "",
+      skillGaps: analysis.skillGaps || [],
+      salaryRange: analysis.salaryRange || { min: 0, max: 0, currency: "GBP", explanation: "" },
+      jobMatches: analysis.jobMatches || [],
+      courses: analysis.courses || [],
+      atsScore: {
+        score: Number(analysis.atsScore?.score ?? 0),
+        missingKeywords: analysis.atsScore?.missingKeywords || [],
+        formattingIssues: analysis.atsScore?.formattingIssues || [],
+        improvements: analysis.atsScore?.improvements || [],
+      },
+      resumeText,
+    };
 
-    return NextResponse.json({ success: true, analysis });
+    return NextResponse.json({ success: true, analysis: flatAnalysis });
   } catch (error) {
     console.error("[v0] Resume analysis error:", error);
     return NextResponse.json(
