@@ -203,13 +203,7 @@ export default function VoicePage() {
 
       await vapiInstance.start(VAPI_ASSISTANT_ID, {
         firstMessage: selectedGreeting,
-        voice: {
-          provider: "11labs",
-          voiceId: isFemaleVoice
-            ? "EXAVITQu4vr4xnSDxMaL"
-            : "pNInz6obpgDQGcFmaJgB",
-        },
-      });
+        model: {
           provider: "anthropic",
           model: "claude-3-5-sonnet-20241022",
           messages: [
