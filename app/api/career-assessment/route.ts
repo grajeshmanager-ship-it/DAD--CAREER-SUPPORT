@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,67 +16,43 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "API key not configured" }, { status: 500 });
 
-    const prompt = `You are DAD — a deeply knowledgeable, honest, and caring career advisor. A person has shared their full situation with you. Give them a genuinely personalised, honest career assessment.
+    const prompt = `You are DAD — a deeply knowledgeable, honest, and caring career advisor. Analyse this person's situation and give them a genuinely personalised career assessment.
 
 SITUATION TYPE: ${situation}
-SPECIAL CONTEXT FOR THIS SITUATION:
-${situationContext}
+SPECIAL CONTEXT: ${situationContext}
 
-PERSON'S FULL DETAILS:
+PERSON'S DETAILS:
 - Education: ${education}
-- Country they want to work in: ${country}
-- Work experience: ${experience || "None"}
+- Country: ${country}
+- Experience: ${experience || "None"}
 - Graduation date: ${graduationDate || "N/A"}
 - Application history: ${applied || "N/A"}
-- Why leaving current career: ${whyLeaving || "N/A"}
-- Career break reason/duration: ${breakReason || "N/A"}
+- Why leaving: ${whyLeaving || "N/A"}
+- Career break: ${breakReason || "N/A"}
 - Interests: ${interests}
 - Skills: ${skills || "None listed"}
-- Career goals/constraints: ${goals}
-- Biggest concerns: ${concerns || "Not specified"}
-
-CRITICAL INSTRUCTIONS:
-- Use the situation context above to shape your entire response
-- Be specific to THIS person's exact background — no generic advice
-- Be honest. If something is unrealistic, say so with a better alternative
-- Salary ranges must reflect the country they want to work in
-- The action plan must be tailored to their specific situation type
+- Goals: ${goals}
+- Concerns: ${concerns || "Not specified"}
 
 Return ONLY valid JSON:
 {
   "recommendedPath": "Specific career path name",
-  "reasoning": "2-3 honest sentences explaining exactly why this path suits them based on their specific background and situation",
+  "reasoning": "2-3 honest sentences explaining why",
   "topRoles": [
-    {
-      "title": "Job title",
-      "description": "One sentence on day-to-day reality of this role",
-      "salaryRange": "Realistic range for their country e.g. £28k-£40k"
-    }
+    { "title": "Job title", "description": "Day-to-day reality", "salaryRange": "£28k-£40k" }
   ],
   "skillsToLearn": ["skill1", "skill2", "skill3", "skill4", "skill5"],
   "actionPlan": [
-    {
-      "step": "Short step title",
-      "timeframe": "Specific timeframe e.g. This week, Month 1-2, Within 3 months",
-      "description": "Specific, actionable, tailored to their situation"
-    }
+    { "step": "Short title", "timeframe": "This week", "description": "Specific action" }
   ],
   "courses": [
-    {
-      "name": "Specific course name",
-      "provider": "Coursera / Udemy / LinkedIn Learning / FutureLearn etc",
-      "reason": "Why THIS course for THIS person specifically"
-    }
+    { "name": "Course name", "provider": "Provider", "reason": "Why this course" }
   ],
-  "encouragement": "One warm but honest sentence from DAD — specific to their situation, not generic"
+  "encouragement": "One warm honest sentence from DAD",
+  "careerSummary": "One paragraph summary of this person's career situation, goals and recommended path — detailed enough for an AI to reference in conversation"
 }
 
-Rules:
-- topRoles: exactly 3
-- skillsToLearn: exactly 5-6
-- actionPlan: exactly 5 steps, situation-appropriate
-- courses: exactly 3-4
-- Return ONLY the JSON`;
+Rules: topRoles 3, skillsToLearn 5-6, actionPlan 5, courses 3-4.`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -104,6 +81,19 @@ Rules:
     } catch {
       return NextResponse.json({ error: "Failed to parse result" }, { status: 500 });
     }
+
+    // Save to Supabase profile
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("profiles").update({
+          career_path: result.recommendedPath,
+          career_roles: result.topRoles?.map((r: { title: string }) => r.title) || [],
+          last_analysis_at: new Date().toISOString(),
+        }).eq("id", user.id);
+      }
+    } catch { /* silent */ }
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
