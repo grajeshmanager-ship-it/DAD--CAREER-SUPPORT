@@ -10,7 +10,7 @@ import {
   Target, TrendingUp, BookOpen, Briefcase
 } from "lucide-react";
 import Link from "next/link";
-import { DadLoading } from "@/components/ui/dad-loading";
+import DadLoading from "@/components/ui/dad-loading";
 
 interface CareerResult {
   recommendedPath: string;
