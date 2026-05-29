@@ -271,7 +271,7 @@ export default function CareerPage() {
       .every(f => form[f.key]?.trim().length > 0);
   };
 
-  if (loading) return <DadLoading message="DAD is mapping your career path..." />;
+  if (loading) return <DadLoading />;
 
   return (
     <div className="min-h-screen bg-background">
