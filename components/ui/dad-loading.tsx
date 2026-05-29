@@ -199,8 +199,9 @@ export default function DadLoading({ onComplete }: { onComplete?: () => void }) 
     }
 
     function drawScene() {
-      const W = canvas.offsetWidth;
-      const H = canvas.offsetHeight;
+     if (!canvas) return;
+const W = canvas.offsetWidth;
+const H = canvas.offsetHeight;
       sceneT.current++;
       const t = sceneT.current;
 
