@@ -12,6 +12,11 @@ interface Profile {
   country: string;
   companion_type: string;
   companion_name: string;
+  resume_summary?: string;
+  resume_ats_score?: number;
+  resume_skills?: string[];
+  career_path?: string;
+  career_roles?: string[];
 }
 
 type Emotion = "idle" | "talking" | "happy" | "excited" | "sad" | "empathetic" | "proud" | "thinking";
@@ -69,6 +74,7 @@ export default function VoicePage() {
   const [duration, setDuration] = useState(0);
   const [status, setStatus] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [contextReady, setContextReady] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const vapiRef = useRef<Vapi | null>(null);
@@ -78,15 +84,21 @@ export default function VoicePage() {
   const frameRef = useRef<number>(0);
   const tRef = useRef(0);
   const analyzeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isActiveRef = useRef(false);
 
   useEffect(() => {
     const loadProfile = async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-      if (data) setProfile(data);
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      if (data) {
+        setProfile(data);
+        setContextReady(true);
+      }
     };
     loadProfile();
   }, []);
@@ -99,7 +111,6 @@ export default function VoicePage() {
   }, [isActive]);
 
   useEffect(() => { emotionRef.current = emotion; }, [emotion]);
-  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
 
   const spawnEffects = useCallback((emo: Emotion, cx: number, cy: number) => {
     if (emo === "happy") {
@@ -167,7 +178,20 @@ export default function VoicePage() {
     } catch { /* silent */ }
   }, [spawnEffects]);
 
-  // Canvas draw
+  // Build context-aware first message
+  const buildFirstMessage = useCallback((greeting: string) => {
+    if (!profile) return greeting;
+    const parts: string[] = [greeting];
+    if (profile.resume_summary) {
+      parts.push(`I've already looked at your CV — ${profile.resume_summary.slice(0, 120)}...`);
+    }
+    if (profile.career_path) {
+      parts.push(`I know you're working toward ${profile.career_path}.`);
+    }
+    return parts.join(" ");
+  }, [profile]);
+
+  // Canvas animation
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -210,7 +234,6 @@ export default function VoicePage() {
       const s2 = Math.sin(t*0.04);
       const s3 = Math.sin(t*0.06);
 
-      // Pose per emotion
       let bodyBob=s*3, bodyTilt=s*0.01;
       let leftArm=0.15+s*0.03, rightArm=-0.15+s*0.03;
       let leftLeg=0, rightLeg=0;
@@ -221,85 +244,61 @@ export default function VoicePage() {
       let leftHandObj="paper";
       const shirtColor = SHIRT_COLORS[emo];
 
-      if (emo==="idle") {
-        bodyBob=s*3; leftArm=0.15+s*0.03; rightArm=-0.15+s*0.03;
-        headTilt=s*0.02; mouthType="neutral"; leftHandObj="paper";
-      } else if (emo==="talking") {
-        bodyBob=s*4; bodyTilt=s*0.02;
-        leftArm=-0.3+s2*0.15; rightArm=-0.8+s3*0.3;
-        headBob=s2*3; headTilt=s*0.05;
-        mouthType="talking"; lBrow=-0.1; rBrow=0.1;
-        rightHandObj="point"; leftHandObj="";
+      if (emo==="idle") { leftHandObj="paper"; mouthType="neutral"; }
+      else if (emo==="talking") {
+        bodyBob=s*4; leftArm=-0.3+s2*0.15; rightArm=-0.8+s3*0.3;
+        headBob=s2*3; headTilt=s*0.05; mouthType="talking";
+        lBrow=-0.1; rBrow=0.1; rightHandObj="point"; leftHandObj="";
       } else if (emo==="happy") {
-        const jump=Math.abs(s)*-10;
-        bodyBob=jump; bodyTilt=s*0.03;
+        const jump=Math.abs(s)*-10; bodyBob=jump; bodyTilt=s*0.03;
         leftArm=-0.8+s*0.2; rightArm=-0.8+s*0.2;
         leftLeg=s*0.12; rightLeg=-s*0.12;
         headBob=jump*0.5; headTilt=s*0.08;
         mouthType="bigsmile"; lBrow=-0.2; rBrow=-0.2; leftHandObj="";
       } else if (emo==="excited") {
-        const bounce=Math.abs(Math.sin(t*0.07))*-22;
-        bodyBob=bounce; bodyTilt=s3*0.06;
+        const bounce=Math.abs(Math.sin(t*0.07))*-22; bodyBob=bounce; bodyTilt=s3*0.06;
         leftArm=-1.3+s3*0.3; rightArm=-1.3+s2*0.3;
         leftLeg=s2*0.18; rightLeg=-s2*0.18;
         headBob=bounce*0.4; headTilt=s3*0.14;
-        mouthType="o"; lBrow=-0.3; rBrow=-0.3;
-        rightHandObj="thumbup"; leftHandObj="";
+        mouthType="o"; lBrow=-0.3; rBrow=-0.3; rightHandObj="thumbup"; leftHandObj="";
       } else if (emo==="sad") {
-        bodyBob=10+s*2; bodyTilt=-0.08+s*0.01;
-        leftArm=0.45; rightArm=-0.45;
+        bodyBob=10+s*2; bodyTilt=-0.08+s*0.01; leftArm=0.45; rightArm=-0.45;
         headBob=12+s*1; headTilt=-0.18+s*0.02;
         mouthType="sad"; lBrow=0.25; rBrow=-0.25; leftHandObj="";
       } else if (emo==="empathetic") {
-        bodyBob=6+s*2; bodyTilt=s*0.015;
-        leftArm=-0.55+s*0.05; rightArm=-0.65+s*0.05;
+        bodyBob=6+s*2; leftArm=-0.55+s*0.05; rightArm=-0.65+s*0.05;
         headBob=5+s*2; headTilt=0.14+s*0.02;
         mouthType="sad"; lBrow=0.15; rBrow=-0.15; leftHandObj="";
       } else if (emo==="proud") {
-        bodyBob=s*3; bodyTilt=s*0.01;
-        leftArm=0.1; rightArm=-1.05+s*0.05;
-        leftLeg=0.05; rightLeg=-0.05;
-        headBob=s*2; headTilt=-0.05;
-        mouthType="smile"; lBrow=-0.15; rBrow=-0.15;
-        rightHandObj="thumbup"; leftHandObj="";
+        bodyBob=s*3; leftArm=0.1; rightArm=-1.05+s*0.05;
+        leftLeg=0.05; rightLeg=-0.05; headBob=s*2; headTilt=-0.05;
+        mouthType="smile"; lBrow=-0.15; rBrow=-0.15; rightHandObj="thumbup"; leftHandObj="";
       } else if (emo==="thinking") {
-        bodyBob=s*2; bodyTilt=-0.04;
-        leftArm=0.1; rightArm=-1.15;
-        headBob=2+s*2; headTilt=0.12+s*0.03;
-        mouthType="neutral"; lBrow=0.12; rBrow=-0.22; leftHandObj="";
+        bodyBob=s*2; bodyTilt=-0.04; leftArm=0.1; rightArm=-1.15;
+        headBob=2+s*2; headTilt=0.12+s*0.03; mouthType="neutral"; lBrow=0.12; rBrow=-0.22; leftHandObj="";
       }
 
       const skin="#e8c49a", hair="#2d1f0e", pants="#3d4a5c", shoe="#222";
-
-      ctx.save();
-      ctx.translate(cx, groundY);
+      ctx.save(); ctx.translate(cx, groundY); ctx.rotate(bodyTilt);
 
       // Shadow
-      ctx.save();
-      ctx.scale(1.1, 0.15);
+      ctx.save(); ctx.scale(1.1, 0.15);
       const sg = ctx.createRadialGradient(0,0,0,0,0,55);
-      sg.addColorStop(0,"rgba(0,0,0,0.35)");
-      sg.addColorStop(1,"rgba(0,0,0,0)");
-      ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(0,0,55,0,Math.PI*2); ctx.fill();
-      ctx.restore();
-
-      ctx.rotate(bodyTilt);
+      sg.addColorStop(0,"rgba(0,0,0,0.35)"); sg.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(0,0,55,0,Math.PI*2); ctx.fill(); ctx.restore();
 
       // LEFT LEG
-      ctx.save(); ctx.translate(-18, 60+bodyBob); ctx.rotate(leftLeg);
+      ctx.save(); ctx.translate(-18,60+bodyBob); ctx.rotate(leftLeg);
       ctx.fillStyle=pants; ctx.beginPath(); ctx.roundRect(-9,0,18,55,4); ctx.fill();
-      ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill();
-      ctx.restore();
+      ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill(); ctx.restore();
 
       // RIGHT LEG
-      ctx.save(); ctx.translate(18, 60+bodyBob); ctx.rotate(rightLeg);
+      ctx.save(); ctx.translate(18,60+bodyBob); ctx.rotate(rightLeg);
       ctx.fillStyle=pants; ctx.beginPath(); ctx.roundRect(-9,0,18,55,4); ctx.fill();
-      ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill();
-      ctx.restore();
+      ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill(); ctx.restore();
 
       // TORSO
-      ctx.fillStyle=shirtColor;
-      ctx.beginPath(); ctx.roundRect(-33,-20+bodyBob,66,80,8); ctx.fill();
+      ctx.fillStyle=shirtColor; ctx.beginPath(); ctx.roundRect(-33,-20+bodyBob,66,80,8); ctx.fill();
 
       // LEFT ARM
       ctx.save(); ctx.translate(-33,-10+bodyBob); ctx.rotate(leftArm);
@@ -320,14 +319,12 @@ export default function VoicePage() {
       ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(1,61,10,0,Math.PI*2); ctx.fill();
       if (rightHandObj==="point") {
         ctx.fillStyle=skin; ctx.save(); ctx.translate(1,61);
-        ctx.beginPath(); ctx.roundRect(-4,-4,28,8,4); ctx.fill();
-        ctx.restore();
+        ctx.beginPath(); ctx.roundRect(-4,-4,28,8,4); ctx.fill(); ctx.restore();
       }
       if (rightHandObj==="thumbup") {
         ctx.fillStyle=skin; ctx.save(); ctx.translate(1,61); ctx.rotate(-0.3);
         ctx.beginPath(); ctx.roundRect(-5,-5,10,22,4); ctx.fill();
-        ctx.beginPath(); ctx.roundRect(-5,-18,24,12,4); ctx.fill();
-        ctx.restore();
+        ctx.beginPath(); ctx.roundRect(-5,-18,24,12,4); ctx.fill(); ctx.restore();
       }
       ctx.restore();
 
@@ -336,7 +333,6 @@ export default function VoicePage() {
 
       // HEAD
       ctx.save(); ctx.translate(0,-62+bodyBob+headBob); ctx.rotate(headTilt);
-
       ctx.fillStyle=skin; ctx.beginPath(); ctx.ellipse(0,0,33,37,0,0,Math.PI*2); ctx.fill();
 
       // Hair
@@ -390,7 +386,7 @@ export default function VoicePage() {
       }
       else { ctx.beginPath(); ctx.moveTo(-8,10); ctx.lineTo(8,10); ctx.stroke(); }
 
-      // Thought bubble (thinking)
+      // Thought bubble
       if (emo==="thinking") {
         const alpha=0.6+Math.sin(tRef.current*0.04)*0.3;
         ctx.save(); ctx.globalAlpha=alpha;
@@ -417,23 +413,17 @@ export default function VoicePage() {
       const emo = emotionRef.current;
       const blink = (t % 160) < 4;
 
-      // Background
       const bgColors: Record<Emotion, [string,string]> = {
-        idle:       ["#0f0c08","#000"],
-        talking:    ["#0a0a14","#000"],
-        happy:      ["#141000","#000"],
-        excited:    ["#160800","#000"],
-        sad:        ["#05080f","#000"],
-        empathetic: ["#0a0514","#000"],
-        proud:      ["#031006","#000"],
-        thinking:   ["#0a0a0a","#000"],
+        idle:["#0f0c08","#000"], talking:["#0a0a14","#000"],
+        happy:["#141000","#000"], excited:["#160800","#000"],
+        sad:["#05080f","#000"], empathetic:["#0a0514","#000"],
+        proud:["#031006","#000"], thinking:["#0a0a0a","#000"],
       };
       const [c1,c2] = bgColors[emo];
       const bg = ctx.createLinearGradient(0,0,0,H);
       bg.addColorStop(0,c1); bg.addColorStop(1,c2);
       ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-      // Ground line
       const gColors: Record<Emotion, string> = {
         idle:"#1a1208",talking:"#12121a",happy:"#1a1600",excited:"#180c00",
         sad:"#08101a",empathetic:"#100818",proud:"#041408",thinking:"#111"
@@ -442,7 +432,6 @@ export default function VoicePage() {
       gg.addColorStop(0,gColors[emo]); gg.addColorStop(1,"#000");
       ctx.fillStyle=gg; ctx.fillRect(0,groundY,W,H-groundY);
 
-      // Ambient light glow behind character
       const glowColors: Record<Emotion, string> = {
         idle:"rgba(212,160,80,0.06)",talking:"rgba(212,160,80,0.08)",
         happy:"rgba(255,215,0,0.12)",excited:"rgba(255,107,53,0.15)",
@@ -458,16 +447,13 @@ export default function VoicePage() {
       // Particles
       particlesRef.current = particlesRef.current.filter(p => {
         p.life -= p.decay; if (p.life<=0) return false;
-        p.vy += 0.15; p.vx *= 0.99;
-        p.x += p.vx; p.y += p.vy;
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
+        p.vy += 0.15; p.vx *= 0.99; p.x += p.vx; p.y += p.vy;
+        ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
         ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2); ctx.fill();
-        ctx.globalAlpha = 1;
-        return true;
+        ctx.globalAlpha = 1; return true;
       });
 
-      // Floating items (stars, hearts)
+      // Floating items
       floatingRef.current = floatingRef.current.filter(fi => {
         fi.life -= fi.decay; if (fi.life<=0) return false;
         fi.x += fi.vx; fi.y += fi.vy;
@@ -480,7 +466,7 @@ export default function VoicePage() {
         return true;
       });
 
-      // Ambient rising particles
+      // Ambient particles
       const shirtC = SHIRT_COLORS[emo];
       if (Math.random() < 0.25) {
         particlesRef.current.push({
@@ -496,7 +482,6 @@ export default function VoicePage() {
 
     frameRef.current = requestAnimationFrame(draw);
 
-    // Auto spawn effects
     const effectInterval = setInterval(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -516,11 +501,15 @@ export default function VoicePage() {
   const startCall = async () => {
     const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
     if (!vapiKey || connecting) return;
+
     const type = profile?.companion_type || "dad";
     const greetings = COMPANION_GREETINGS[type] || COMPANION_GREETINGS.dad;
-    const selectedGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    const baseGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    const firstMessage = buildFirstMessage(baseGreeting);
+
     setConnecting(true);
     setStatus("Connecting...");
+
     try {
       const vapiInstance = new Vapi(vapiKey);
       vapiRef.current = vapiInstance;
@@ -539,6 +528,7 @@ export default function VoicePage() {
         setStatus("Connection failed. Try again.");
         vapiRef.current = null;
       });
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vapiInstance.on("message", (msg: any) => {
         if (msg?.type==="transcript" && msg?.role==="assistant" && msg?.transcriptType==="final") {
@@ -561,7 +551,8 @@ export default function VoicePage() {
         }
       });
 
-      await vapiInstance.start(VAPI_ASSISTANT_ID, { firstMessage: selectedGreeting });
+      await vapiInstance.start(VAPI_ASSISTANT_ID, { firstMessage });
+
     } catch {
       setConnecting(false);
       setStatus("Failed to connect. Please try again.");
@@ -582,12 +573,13 @@ export default function VoicePage() {
   const companionType = profile?.companion_type || "dad";
   const companionName = profile?.companion_name || "DAD";
 
+  // Context badge
+  const hasContext = profile?.resume_summary || profile?.career_path;
+
   return (
     <div style={{ position:"fixed", inset:0, background:"#000", overflow:"hidden", fontFamily:"sans-serif", display:"flex", flexDirection:"column" }}>
-      {/* Canvas fills everything */}
       <canvas ref={canvasRef} style={{ position:"absolute", inset:0, width:"100%", height:"100%" }} />
 
-      {/* Back */}
       <Link href="/dashboard" style={{
         position:"absolute", top:20, left:20, zIndex:20,
         color:"rgba(255,255,255,0.3)", display:"flex", alignItems:"center",
@@ -596,7 +588,6 @@ export default function VoicePage() {
         <ArrowLeft size={13} /> Back
       </Link>
 
-      {/* Duration */}
       {isActive && (
         <div style={{
           position:"absolute", top:24, right:20, zIndex:20,
@@ -607,7 +598,6 @@ export default function VoicePage() {
         </div>
       )}
 
-      {/* Companion name — top center */}
       <div style={{
         position:"absolute", top:20, left:"50%", transform:"translateX(-50%)",
         zIndex:20, textAlign:"center",
@@ -618,9 +608,13 @@ export default function VoicePage() {
         <p style={{ fontSize:18, fontWeight:200, color:"rgba(255,255,255,0.7)", letterSpacing:"0.2em", margin:0 }}>
           {companionName}
         </p>
+        {hasContext && !isActive && (
+          <p style={{ fontSize:9, color:"rgba(212,160,80,0.6)", letterSpacing:"0.15em", margin:"4px 0 0", textTransform:"uppercase" }}>
+            ✓ Knows your CV & career path
+          </p>
+        )}
       </div>
 
-      {/* Emotion label — just above bottom UI */}
       <div style={{
         position:"absolute", bottom:160, left:"50%", transform:"translateX(-50%)",
         zIndex:20, textAlign:"center",
@@ -628,15 +622,13 @@ export default function VoicePage() {
         <p style={{
           fontSize:11, color:"rgba(255,255,255,0.25)",
           letterSpacing:"0.3em", textTransform:"uppercase", margin:0,
-          transition:"all 0.8s ease",
         }}>
           {isActive ? EMOTION_LABELS[emotion] : "Tap to connect"}
         </p>
         {isActive && transcript && (
           <p style={{
             fontSize:13, color:"rgba(255,255,255,0.5)",
-            fontStyle:"italic", maxWidth:300, margin:"8px auto 0",
-            lineHeight:1.5,
+            fontStyle:"italic", maxWidth:300, margin:"8px auto 0", lineHeight:1.5,
           }}>
             "{transcript.slice(0,80)}{transcript.length>80?"...":""}"
           </p>
@@ -644,19 +636,18 @@ export default function VoicePage() {
         {status && <p style={{ fontSize:11, color:"rgba(255,80,80,0.7)", margin:"8px 0 0" }}>{status}</p>}
       </div>
 
-      {/* Controls — bottom */}
       <div style={{
         position:"absolute", bottom:40, left:"50%", transform:"translateX(-50%)",
         zIndex:20, display:"flex", gap:16, alignItems:"center",
       }}>
         {!isActive ? (
-          <button onClick={startCall} disabled={connecting} style={{
+          <button onClick={startCall} disabled={connecting || !contextReady} style={{
             width:68, height:68, borderRadius:"50%", border:"none",
             background:"linear-gradient(135deg,#d4a050,#a07030)",
-            cursor:connecting?"not-allowed":"pointer",
+            cursor:connecting||!contextReady?"not-allowed":"pointer",
             display:"flex", alignItems:"center", justifyContent:"center",
             boxShadow:"0 0 40px rgba(212,160,80,0.5)",
-            opacity:connecting?0.5:1, transition:"all 0.3s ease",
+            opacity:connecting||!contextReady?0.5:1, transition:"all 0.3s ease",
           }}>
             <Phone size={26} color="#000" />
           </button>
@@ -667,7 +658,6 @@ export default function VoicePage() {
               border:`1px solid ${muted?"rgba(220,60,60,0.5)":"rgba(255,255,255,0.12)"}`,
               background:muted?"rgba(220,60,60,0.15)":"rgba(255,255,255,0.05)",
               cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-              transition:"all 0.3s ease",
             }}>
               {muted ? <MicOff size={20} color="rgba(220,100,100,0.9)" /> : <Mic size={20} color="rgba(255,255,255,0.6)" />}
             </button>
@@ -677,7 +667,6 @@ export default function VoicePage() {
               background:"rgba(220,60,60,0.2)",
               cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
               boxShadow:"0 0 20px rgba(220,60,60,0.2)",
-              transition:"all 0.3s ease",
             }}>
               <PhoneOff size={26} color="rgba(220,100,100,0.9)" />
             </button>
