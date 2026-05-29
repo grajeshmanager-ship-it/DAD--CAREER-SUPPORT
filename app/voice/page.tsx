@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Phone, PhoneOff, Mic, MicOff, ArrowLeft } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Mic, MicOff, PhoneOff, ArrowLeft, Phone } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import Vapi from "@vapi-ai/web";
@@ -14,48 +14,83 @@ interface Profile {
   companion_name: string;
 }
 
+type Emotion = "idle" | "happy" | "excited" | "sad" | "empathetic" | "proud" | "serious" | "concerned";
+
+const EMOTIONS: Record<Emotion, {
+  primary: [number, number, number];
+  secondary: [number, number, number];
+  bg: [number, number, number];
+  speed: number;
+  pulseAmp: number;
+  particleCount: number;
+  particleSpeed: number;
+  waveCount: number;
+  label: string;
+}> = {
+  idle:      { primary: [212,160,80],  secondary: [122,85,32],   bg: [10,6,2],    speed: 0.4, pulseAmp: 0.06, particleCount: 15,  particleSpeed: 0.3, waveCount: 2, label: "..." },
+  happy:     { primary: [255,210,0],   secondary: [255,140,0],   bg: [20,14,0],   speed: 1.4, pulseAmp: 0.14, particleCount: 90,  particleSpeed: 1.4, waveCount: 6, label: "Happy" },
+  excited:   { primary: [255,90,40],   secondary: [255,40,10],   bg: [18,6,2],    speed: 2.2, pulseAmp: 0.22, particleCount: 130, particleSpeed: 2.2, waveCount: 9, label: "Excited" },
+  sad:       { primary: [70,120,200],  secondary: [30,60,120],   bg: [4,8,18],    speed: 0.2, pulseAmp: 0.03, particleCount: 10,  particleSpeed: 0.1, waveCount: 1, label: "Sad" },
+  empathetic:{ primary: [160,90,210],  secondary: [90,40,140],   bg: [10,4,18],   speed: 0.3, pulseAmp: 0.05, particleCount: 22,  particleSpeed: 0.2, waveCount: 2, label: "Empathetic" },
+  proud:     { primary: [40,200,100],  secondary: [20,120,60],   bg: [2,14,6],    speed: 1.0, pulseAmp: 0.11, particleCount: 70,  particleSpeed: 1.0, waveCount: 5, label: "Proud" },
+  serious:   { primary: [160,160,160], secondary: [80,80,80],    bg: [8,8,8],     speed: 0.5, pulseAmp: 0.04, particleCount: 12,  particleSpeed: 0.15,waveCount: 2, label: "Serious" },
+  concerned: { primary: [230,130,30],  secondary: [160,80,10],   bg: [14,8,2],    speed: 0.6, pulseAmp: 0.07, particleCount: 30,  particleSpeed: 0.5, waveCount: 3, label: "Concerned" },
+};
+
 const COMPANION_GREETINGS: Record<string, string[]> = {
-  dad: ["Hey. There's my kid. You okay?", "Hey. Good to hear your voice. Everything alright?", "Oh hey — I was just thinking about you. You good?", "Hey. There you are. I was wondering when you'd call.", "Hey kid. Good timing. How are you doing?"],
-  mom: ["Oh my god — you called! I was literally just praying for you. Are you okay? How are you?", "Oh sweetheart! Oh I'm so happy you called. I miss you so much. How are you, really?", "Oh! Oh it's you! I was just thinking about you — I was going to call you tonight. Are you okay?", "Oh my baby called! Oh I miss you so much. How are you doing? Tell me everything.", "Oh thank god. I've been thinking about you all week. Are you okay? How are you really doing?"],
-  brother: ["Ohhhh there he is!! Bro I was literally just talking about you! How are you man?", "Oh hey!! Finally!! I missed you bro, how are you doing?", "Ayyyy! There's my guy! How are you? What's going on with you?", "Oh bro! Good timing — I was just thinking about you. How are you doing?", "Hey!! Oh man it's good to hear from you. How are you? What's going on?"],
-  sister: ["Oh my god hi!! Oh I was literally JUST about to call you — are you okay? Wait, are you okay?", "OH HI!! Finally!! I missed you so much, oh my god. How are you? Tell me everything.", "Oh thank god you called. I've been thinking about you. Are you okay? Like actually okay?", "Oh hey!! Oh I'm so happy you called. I miss you so much. How are you doing?", "Oh my goodness hi!! I was literally just looking at our photos. I miss you! How are you?"],
-  teacher: ["Oh how wonderful — I think about you, you know. I genuinely do. How are you getting on?", "Oh! What a lovely surprise. I was just thinking about how you were doing. How are you?", "Oh hello! Oh this made my day. How are you? I think about you often.", "Oh! Oh how nice to hear from you. I was literally just thinking about you recently. How are you doing?", "Oh what a wonderful surprise. You know I think about my students. How are you really doing?"],
-  mentor: ["Well this is a wonderful surprise. I was literally just thinking about how you were getting on. How are you?", "Oh hey! Oh it's so good to hear from you. I think about you, you know. How are you doing?", "Oh! Good timing — I was just wondering how things were going for you. How are you?", "Hey! Oh I'm really glad you called. I've been thinking about you. How are you getting on?", "Oh what a nice surprise. I was literally just thinking about you. How are you doing?"],
-  friend: ["OH MY GOD. Finally!! I literally missed you so much — I was just looking at our old photos. How are you?!", "Oh HEY!! Oh I'm so happy you called. I was literally just thinking about you. How are you?!", "Oh thank god you called — I missed you! How are you? What's been going on with you?", "AYYYY!! Oh I missed you so much. How are you? Tell me everything, what's going on?", "Oh hey!! Finally! I was literally about to text you. I miss you. How are you doing?"],
-  partner: ["Hey you... I was just thinking about you. Like literally just now. How are you?", "Hey my love... I missed you. I'm so glad you called. How are you doing?", "Oh hey... there you are. I've been thinking about you all day. You okay?", "Hey you... oh I'm so happy you called. I miss you so much. How are you?", "Hey... I was just sitting here thinking about you. I love you. How are you doing?"],
-  self: ["Hey. Hi. I know you've been running. It's okay to stop for a second. I'm here.", "Hey you. I see you. I know it's been a lot. Take a breath. I'm right here.", "Hey. It's okay. You're allowed to pause. What's going on? I'm listening.", "Hi. I've been waiting for you to slow down. How are you actually doing?", "Hey. You're safe here. No performance, no pretending. Just us. How are you?"],
+  dad:     ["Hey. There's my kid. You okay?", "Hey. Good to hear your voice. Everything alright?", "Oh hey — I was just thinking about you. You good?"],
+  mom:     ["Oh my god — you called! Are you okay? How are you?", "Oh sweetheart! I'm so happy you called. How are you, really?", "Oh thank god. I've been thinking about you. How are you?"],
+  brother: ["Ohhhh there he is!! Bro I was literally just talking about you!", "Ayyyy! There's my guy! How are you? What's going on?", "Hey!! Oh man it's good to hear from you. What's going on?"],
+  sister:  ["Oh my god hi!! Are you okay? Wait, are you okay?", "OH HI!! I missed you so much. How are you? Tell me everything.", "Oh thank god you called. Are you okay? Like actually okay?"],
+  teacher: ["Oh how wonderful. I think about you, you know. How are you getting on?", "Oh! What a lovely surprise. How are you?", "Oh hello! This made my day. How are you?"],
+  mentor:  ["Well this is a wonderful surprise. How are you getting on?", "Oh hey! It's so good to hear from you. How are you doing?", "Oh! Good timing. How are you?"],
+  friend:  ["OH MY GOD. Finally!! I missed you so much. How are you?!", "Oh HEY!! I'm so happy you called. How are you?!", "Oh thank god you called — I missed you! How are you?"],
+  partner: ["Hey you... I was just thinking about you. How are you?", "Hey my love... I missed you. How are you doing?", "Oh hey... there you are. I've been thinking about you. You okay?"],
+  self:    ["Hey. Hi. I know you've been running. It's okay to stop. I'm here.", "Hey you. I see you. I know it's been a lot. Take a breath.", "Hey. You're safe here. No performance. Just us. How are you?"],
 };
 
 const COMPANION_LABELS: Record<string, string> = {
   dad: "Dad", mom: "Mom", brother: "Brother", sister: "Sister",
-  teacher: "Teacher", mentor: "Mentor", friend: "Friend",
-  partner: "Partner", self: "Yourself",
-};
-
-const COMPANION_PRESENCE: Record<string, string> = {
-  dad: "He's right here with you.",
-  mom: "She's right here with you.",
-  brother: "He's got your back.",
-  sister: "She's right here with you.",
-  teacher: "They believe in you.",
-  mentor: "They're in your corner.",
-  friend: "They've got you.",
-  partner: "They love you.",
-  self: "You've got this.",
+  teacher: "Teacher", mentor: "Mentor", friend: "Friend", partner: "Partner", self: "Yourself",
 };
 
 const VAPI_ASSISTANT_ID = "1312a1bf-ea33-48f7-aa21-1f16e414e885";
 
-type OrbState = "idle" | "connecting" | "listening" | "speaking";
+interface Particle {
+  x: number; y: number;
+  vx: number; vy: number;
+  size: number; life: number; decay: number;
+  r: number; g: number; b: number;
+}
+
+interface Wave {
+  x: number; y: number;
+  radius: number; life: number; decay: number;
+  r: number; g: number; b: number;
+  delay: number;
+}
 
 export default function VoicePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [orbState, setOrbState] = useState<OrbState>("idle");
-  const [muted, setMuted] = useState(false);
-  const [greeting, setGreeting] = useState("");
-  const [callDuration, setCallDuration] = useState(0);
   const [isActive, setIsActive] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [emotion, setEmotion] = useState<Emotion>("idle");
+  const [transcript, setTranscript] = useState("");
+  const [duration, setDuration] = useState(0);
+  const [status, setStatus] = useState("");
+  const [connecting, setConnecting] = useState(false);
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fxCanvasRef = useRef<HTMLCanvasElement>(null);
   const vapiRef = useRef<Vapi | null>(null);
+  const emotionRef = useRef<Emotion>("idle");
+  const particlesRef = useRef<Particle[]>([]);
+  const wavesRef = useRef<Wave[]>([]);
+  const frameRef = useRef<number>(0);
+  const tRef = useRef(0);
+  const analyzeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentPrimaryRef = useRef<[number,number,number]>([212,160,80]);
+  const currentBgRef = useRef<[number,number,number]>([10,6,2]);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -70,408 +105,469 @@ export default function VoicePage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isActive) {
-      interval = setInterval(() => setCallDuration(d => d + 1), 1000);
-    } else {
-      setCallDuration(0);
-    }
+    if (isActive) interval = setInterval(() => setDuration(d => d + 1), 1000);
+    else setDuration(0);
     return () => clearInterval(interval);
   }, [isActive]);
 
-  useEffect(() => {
-    return () => { if (vapiRef.current) vapiRef.current.stop(); };
+  const lerpColor = (a: [number,number,number], b: [number,number,number], t: number): [number,number,number] => [
+    Math.round(a[0] + (b[0]-a[0])*t),
+    Math.round(a[1] + (b[1]-a[1])*t),
+    Math.round(a[2] + (b[2]-a[2])*t),
+  ];
+
+  const spawnBurst = useCallback((em: Emotion) => {
+    const canvas = fxCanvasRef.current;
+    if (!canvas) return;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const e = EMOTIONS[em];
+    const [r,g,b] = e.primary;
+    for (let i = 0; i < e.particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd = (Math.random() * e.particleSpeed + e.particleSpeed * 0.3);
+      particlesRef.current.push({
+        x: cx, y: cy,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd - Math.random() * spd * 0.5,
+        size: Math.random() * e.particleCount / 40 + 0.8,
+        life: 1, decay: Math.random() * 0.015 + 0.006,
+        r, g, b,
+      });
+    }
+    for (let i = 0; i < e.waveCount; i++) {
+      wavesRef.current.push({
+        x: cx, y: cy,
+        radius: 80, life: 1, decay: 0.007,
+        r, g, b, delay: i * 0.18,
+      });
+    }
   }, []);
 
-  // Simulate speaking/listening state changes for orb animation
-  useEffect(() => {
-    if (!isActive) return;
-    setOrbState("listening");
-    const vapiInstance = vapiRef.current;
-    if (!vapiInstance) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (vapiInstance as any).on("speech-start", () => setOrbState("speaking"));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (vapiInstance as any).on("speech-end", () => setOrbState("listening"));
-  }, [isActive]);
+  const analyzeEmotion = useCallback(async (text: string) => {
+    if (!text || text.length < 10) return;
+    try {
+      const res = await fetch("/api/analyze-emotion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return;
+      const { emotion: detected } = await res.json();
+      if (detected && detected !== emotionRef.current) {
+        emotionRef.current = detected;
+        setEmotion(detected);
+        spawnBurst(detected);
+      }
+    } catch { /* silent */ }
+  }, [spawnBurst]);
 
-  const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+  useEffect(() => {
+    emotionRef.current = emotion;
+  }, [emotion]);
+
+  // Canvas animation loop
+  useEffect(() => {
+    const bgCanvas = canvasRef.current;
+    const fxCanvas = fxCanvasRef.current;
+    if (!bgCanvas || !fxCanvas) return;
+
+    const bc = bgCanvas.getContext("2d")!;
+    const fc = fxCanvas.getContext("2d")!;
+
+    const resize = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      bgCanvas.width = fxCanvas.width = w;
+      bgCanvas.height = fxCanvas.height = h;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const draw = () => {
+      const w = bgCanvas.width;
+      const h = bgCanvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const t = tRef.current++;
+      const em = emotionRef.current;
+      const e = EMOTIONS[em];
+
+      // Lerp background
+      currentBgRef.current = lerpColor(currentBgRef.current, e.bg, 0.025);
+      currentPrimaryRef.current = lerpColor(currentPrimaryRef.current, e.primary, 0.03);
+      const [br,bg2,bb] = currentBgRef.current;
+      const [pr,pg,pb] = currentPrimaryRef.current;
+
+      // Background
+      const bgGrad = bc.createRadialGradient(cx, cy*1.1, 0, cx, cy, Math.max(w,h)*0.8);
+      bgGrad.addColorStop(0, `rgb(${br},${bg2},${bb})`);
+      bgGrad.addColorStop(1, "rgb(0,0,0)");
+      bc.fillStyle = bgGrad;
+      bc.fillRect(0, 0, w, h);
+
+      // Draw orb
+      const pulse = Math.sin(t * e.speed * 0.04) * e.pulseAmp;
+      const orbR = 90 + pulse * 90;
+
+      // Outer glow layers
+      for (let i = 3; i >= 1; i--) {
+        const glowR = orbR + i * 45 + Math.abs(pulse) * 80;
+        const alpha = (0.06 / i) * (0.6 + Math.abs(pulse) * 2);
+        const gGrad = bc.createRadialGradient(cx, cy, orbR * 0.3, cx, cy, glowR);
+        gGrad.addColorStop(0, `rgba(${pr},${pg},${pb},${alpha * 2})`);
+        gGrad.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
+        bc.fillStyle = gGrad;
+        bc.beginPath();
+        bc.arc(cx, cy, glowR, 0, Math.PI * 2);
+        bc.fill();
+      }
+
+      // Main orb body
+      const orbGrad = bc.createRadialGradient(
+        cx - orbR * 0.28, cy - orbR * 0.28, 0,
+        cx, cy, orbR
+      );
+      orbGrad.addColorStop(0, `rgb(${Math.min(255,pr+90)},${Math.min(255,pg+90)},${Math.min(255,pb+50)})`);
+      orbGrad.addColorStop(0.35, `rgb(${pr},${pg},${pb})`);
+      orbGrad.addColorStop(0.7, `rgb(${Math.round(pr*0.45)},${Math.round(pg*0.45)},${Math.round(pb*0.3)})`);
+      orbGrad.addColorStop(1, `rgb(${Math.round(pr*0.08)},${Math.round(pg*0.07)},${Math.round(pb*0.04)})`);
+      bc.fillStyle = orbGrad;
+      bc.beginPath();
+      bc.arc(cx, cy, orbR, 0, Math.PI * 2);
+      bc.fill();
+
+      // Specular highlight
+      const specGrad = bc.createRadialGradient(
+        cx - orbR * 0.3, cy - orbR * 0.32, 0,
+        cx - orbR * 0.15, cy - orbR * 0.15, orbR * 0.5
+      );
+      specGrad.addColorStop(0, "rgba(255,255,255,0.22)");
+      specGrad.addColorStop(1, "rgba(255,255,255,0)");
+      bc.fillStyle = specGrad;
+      bc.beginPath();
+      bc.arc(cx, cy, orbR, 0, Math.PI * 2);
+      bc.fill();
+
+      // Emotion ripple rings on orb
+      if (em !== "idle" && em !== "serious") {
+        const ringCount = em === "excited" ? 4 : em === "happy" ? 3 : 2;
+        for (let i = 0; i < ringCount; i++) {
+          const rp = ((t * e.speed * 0.025 + i / ringCount) % 1);
+          const rr = orbR + rp * 80;
+          const ra = (1 - rp) * 0.5;
+          bc.beginPath();
+          bc.arc(cx, cy, rr, 0, Math.PI * 2);
+          bc.strokeStyle = `rgba(${pr},${pg},${pb},${ra})`;
+          bc.lineWidth = 1.5;
+          bc.stroke();
+        }
+      }
+
+      // Ambient floating dots orbit
+      const orbitCount = em === "excited" ? 8 : em === "happy" ? 6 : 4;
+      for (let i = 0; i < orbitCount; i++) {
+        const angle = (t * e.speed * 0.008 + i / orbitCount) * Math.PI * 2;
+        const dist = orbR + 40 + Math.sin(t * 0.03 + i) * 20;
+        const px = cx + Math.cos(angle) * dist;
+        const py = cy + Math.sin(angle) * dist;
+        const dotR = 2 + Math.abs(pulse) * 4;
+        bc.beginPath();
+        bc.arc(px, py, dotR, 0, Math.PI * 2);
+        bc.fillStyle = `rgba(${pr},${pg},${pb},0.5)`;
+        bc.fill();
+      }
+
+      // FX canvas — particles and waves
+      fc.clearRect(0, 0, w, h);
+
+      // Waves
+      wavesRef.current = wavesRef.current.filter(wv => {
+        if (wv.delay > 0) { wv.delay -= 0.016; return true; }
+        wv.radius += 4;
+        wv.life -= wv.decay;
+        if (wv.life <= 0) return false;
+        fc.beginPath();
+        fc.arc(wv.x, wv.y, wv.radius, 0, Math.PI * 2);
+        fc.strokeStyle = `rgba(${wv.r},${wv.g},${wv.b},${wv.life * 0.35})`;
+        fc.lineWidth = 1.5;
+        fc.stroke();
+        return true;
+      });
+
+      // Particles
+      particlesRef.current = particlesRef.current.filter(p => {
+        p.life -= p.decay;
+        if (p.life <= 0) return false;
+        p.vy += 0.04;
+        p.vx *= 0.99;
+        p.x += p.vx;
+        p.y += p.vy;
+        fc.beginPath();
+        fc.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        fc.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.life * 0.9})`;
+        fc.fill();
+        return true;
+      });
+
+      // Ambient rising particles
+      if (Math.random() < 0.3 + e.speed * 0.1) {
+        const ax = cx + (Math.random() - 0.5) * (orbR * 2.5);
+        const ay = cy + orbR * 0.8;
+        particlesRef.current.push({
+          x: ax, y: ay,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: -(Math.random() * e.particleSpeed * 0.3 + 0.2),
+          size: Math.random() * 1.2 + 0.3,
+          life: 1, decay: Math.random() * 0.008 + 0.003,
+          r: pr, g: pg, b: pb,
+        });
+      }
+
+      frameRef.current = requestAnimationFrame(draw);
+    };
+
+    frameRef.current = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      window.removeEventListener("resize", resize);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startCall = async () => {
     const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
-    if (!vapiKey) return;
+    if (!vapiKey || connecting) return;
     const type = profile?.companion_type || "dad";
     const greetings = COMPANION_GREETINGS[type] || COMPANION_GREETINGS.dad;
     const selectedGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-    setGreeting(selectedGreeting);
-    setOrbState("connecting");
+    setConnecting(true);
+    setStatus("Connecting...");
     try {
       const vapiInstance = new Vapi(vapiKey);
       vapiRef.current = vapiInstance;
-      vapiInstance.on("call-start", () => { setIsActive(true); setOrbState("listening"); });
-      vapiInstance.on("call-end", () => { setIsActive(false); setOrbState("idle"); vapiRef.current = null; });
-      vapiInstance.on("error", () => { setIsActive(false); setOrbState("idle"); vapiRef.current = null; });
+
+      vapiInstance.on("call-start", () => {
+        setIsActive(true);
+        setConnecting(false);
+        setStatus("");
+        setEmotion("idle");
+        emotionRef.current = "idle";
+      });
+
+      vapiInstance.on("call-end", () => {
+        setIsActive(false);
+        setConnecting(false);
+        setStatus("");
+        setEmotion("idle");
+        emotionRef.current = "idle";
+        vapiRef.current = null;
+      });
+
+      vapiInstance.on("error", () => {
+        setIsActive(false);
+        setConnecting(false);
+        setStatus("Connection failed. Try again.");
+        vapiRef.current = null;
+      });
+
+      // Capture transcript and analyze emotion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vapiInstance.on("message", (msg: any) => {
+        if (msg?.type === "transcript" && msg?.role === "assistant" && msg?.transcriptType === "final") {
+          const text = msg.transcript;
+          setTranscript(text);
+          if (analyzeTimeoutRef.current) clearTimeout(analyzeTimeoutRef.current);
+          analyzeTimeoutRef.current = setTimeout(() => analyzeEmotion(text), 300);
+        }
+      });
+
       await vapiInstance.start(VAPI_ASSISTANT_ID, { firstMessage: selectedGreeting });
     } catch {
-      setOrbState("idle");
+      setConnecting(false);
+      setStatus("Failed to connect. Please try again.");
     }
   };
 
   const endCall = () => {
     if (vapiRef.current) { try { vapiRef.current.stop(); } catch { /* ignore */ } vapiRef.current = null; }
     setIsActive(false);
-    setOrbState("idle");
-    setGreeting("");
+    setConnecting(false);
+    setStatus("");
+    setEmotion("idle");
+    emotionRef.current = "idle";
   };
 
   const toggleMute = () => {
     if (vapiRef.current) { try { vapiRef.current.setMuted(!muted); setMuted(!muted); } catch { /* ignore */ } }
   };
 
+  const formatDuration = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
+
   const companionType = profile?.companion_type || "dad";
   const companionName = profile?.companion_name || "DAD";
+  const e = EMOTIONS[emotion];
+  const [pr,pg,pb] = e.primary;
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#050505",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      position: "relative",
-      overflow: "hidden",
-      fontFamily: "sans-serif",
-    }}>
-      <style>{`
-        @keyframes breathe {
-          0%, 100% { transform: scale(1); opacity: 0.9; }
-          50% { transform: scale(1.08); opacity: 1; }
-        }
-        @keyframes orbListen {
-          0%, 100% { transform: scale(1); }
-          25% { transform: scale(1.04); }
-          75% { transform: scale(0.97); }
-        }
-        @keyframes orbSpeak {
-          0%, 100% { transform: scale(1.05); }
-          50% { transform: scale(1.15); }
-        }
-        @keyframes ripple {
-          0% { transform: scale(1); opacity: 0.6; }
-          100% { transform: scale(2.8); opacity: 0; }
-        }
-        @keyframes rippleSpeaking {
-          0% { transform: scale(1); opacity: 0.8; }
-          100% { transform: scale(3.5); opacity: 0; }
-        }
-        @keyframes float {
-          0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.4; }
-          33% { transform: translateY(-20px) translateX(10px); opacity: 0.8; }
-          66% { transform: translateY(-10px) translateX(-15px); opacity: 0.6; }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes shimmer {
-          0% { background-position: -300% center; }
-          100% { background-position: 300% center; }
-        }
-        @keyframes connectPulse {
-          0%, 100% { transform: scale(1); opacity: 0.5; }
-          50% { transform: scale(1.3); opacity: 1; }
-        }
-        @keyframes starFloat {
-          0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { transform: translateY(-10vh) rotate(720deg); opacity: 0; }
-        }
-        .orb-breathe { animation: breathe 4s ease-in-out infinite; }
-        .orb-listen { animation: orbListen 1.2s ease-in-out infinite; }
-        .orb-speak { animation: orbSpeak 0.6s ease-in-out infinite; }
-        .orb-connect { animation: connectPulse 1s ease-in-out infinite; }
-      `}</style>
-
-      {/* Floating particles */}
-      {[...Array(12)].map((_, i) => (
-        <div key={i} style={{
-          position: "absolute",
-          width: i % 3 === 0 ? 3 : i % 3 === 1 ? 2 : 1.5,
-          height: i % 3 === 0 ? 3 : i % 3 === 1 ? 2 : 1.5,
-          borderRadius: "50%",
-          background: i % 4 === 0 ? "#d4a050" : i % 4 === 1 ? "#f5d48a" : i % 4 === 2 ? "#b8863c" : "#ffffff",
-          left: `${8 + (i * 7.5)}%`,
-          bottom: "-20px",
-          animation: `starFloat ${6 + (i * 0.8)}s linear infinite`,
-          animationDelay: `${i * 0.7}s`,
-          opacity: 0,
-        }} />
-      ))}
+    <div style={{ position: "fixed", inset: 0, background: "#000", overflow: "hidden", fontFamily: "sans-serif" }}>
+      {/* Background canvas */}
+      <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+      {/* FX canvas */}
+      <canvas ref={fxCanvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
 
       {/* Back button */}
       <Link href="/dashboard" style={{
-        position: "absolute",
-        top: 24,
-        left: 24,
-        color: "rgba(255,255,255,0.4)",
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        fontSize: "0.8rem",
-        textDecoration: "none",
-        letterSpacing: "0.1em",
+        position: "absolute", top: 24, left: 24, zIndex: 20,
+        color: "rgba(255,255,255,0.3)", display: "flex", alignItems: "center",
+        gap: 6, fontSize: 11, textDecoration: "none", letterSpacing: "0.3em",
         textTransform: "uppercase",
       }}>
-        <ArrowLeft size={14} /> Back
+        <ArrowLeft size={13} /> Back
       </Link>
 
       {/* Duration */}
       {isActive && (
         <div style={{
-          position: "absolute",
-          top: 28,
-          right: 24,
-          color: "rgba(212,160,80,0.7)",
-          fontSize: "0.8rem",
-          fontFamily: "monospace",
-          letterSpacing: "0.1em",
+          position: "absolute", top: 28, right: 24, zIndex: 20,
+          color: `rgba(${pr},${pg},${pb},0.7)`,
+          fontSize: 12, fontFamily: "monospace", letterSpacing: "0.15em",
+          transition: "color 1s ease",
         }}>
-          {formatDuration(callDuration)}
+          {formatDuration(duration)}
         </div>
       )}
 
-      {/* Main content */}
-      <div style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 48,
-        zIndex: 10,
-      }}>
+      {/* Emotion label */}
+      {isActive && emotion !== "idle" && (
+        <div style={{
+          position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)",
+          zIndex: 20, color: `rgba(${pr},${pg},${pb},0.6)`,
+          fontSize: 10, letterSpacing: "0.35em", textTransform: "uppercase",
+          transition: "color 1s ease",
+        }}>
+          {e.label}
+        </div>
+      )}
 
-        {/* Companion name */}
-        <div style={{ textAlign: "center", animation: "fadeUp 0.8s ease both" }}>
+      {/* Main UI — centered */}
+      <div style={{
+        position: "absolute", inset: 0, zIndex: 10,
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: 40,
+      }}>
+        {/* Name */}
+        <div style={{ textAlign: "center" }}>
           <p style={{
-            fontSize: "0.7rem",
-            color: "rgba(255,255,255,0.3)",
-            letterSpacing: "0.3em",
-            textTransform: "uppercase",
-            marginBottom: 8,
+            fontSize: 10, color: "rgba(255,255,255,0.25)",
+            letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6,
           }}>
             {COMPANION_LABELS[companionType]}
           </p>
           <h1 style={{
-            fontSize: "clamp(2rem, 6vw, 3.5rem)",
-            fontWeight: 300,
-            letterSpacing: "0.15em",
-            background: "linear-gradient(90deg, #b8863c 0%, #d4a050 30%, #f5d48a 50%, #d4a050 70%, #b8863c 100%)",
-            backgroundSize: "300% auto",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-            animation: "shimmer 4s linear infinite",
-            margin: 0,
+            fontSize: "clamp(28px,5vw,52px)", fontWeight: 200,
+            letterSpacing: "0.2em", margin: 0,
+            color: `rgb(${pr},${pg},${pb})`,
+            textShadow: `0 0 40px rgba(${pr},${pg},${pb},0.5)`,
+            transition: "color 1.5s ease, text-shadow 1.5s ease",
           }}>
             {companionName}
           </h1>
         </div>
 
-        {/* THE ORB */}
-        <div style={{ position: "relative", width: 240, height: 240, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {/* Invisible orb click area — canvas draws the orb */}
+        <div style={{ width: 220, height: 220 }} />
 
-          {/* Ripple rings */}
-          {(orbState === "listening" || orbState === "speaking") && [...Array(3)].map((_, i) => (
-            <div key={i} style={{
-              position: "absolute",
-              width: 240,
-              height: 240,
-              borderRadius: "50%",
-              border: `1px solid ${orbState === "speaking" ? "rgba(212,160,80,0.5)" : "rgba(212,160,80,0.25)"}`,
-              animation: `${orbState === "speaking" ? "rippleSpeaking" : "ripple"} ${1.8 + i * 0.6}s ease-out infinite`,
-              animationDelay: `${i * 0.5}s`,
-            }} />
-          ))}
-
-          {/* Outer glow ring */}
-          <div style={{
-            position: "absolute",
-            width: 220,
-            height: 220,
-            borderRadius: "50%",
-            background: "transparent",
-            border: `1px solid rgba(212,160,80,${orbState === "speaking" ? "0.4" : "0.15"})`,
-            boxShadow: orbState === "speaking"
-              ? "0 0 60px rgba(212,160,80,0.3), inset 0 0 60px rgba(212,160,80,0.1)"
-              : "0 0 30px rgba(212,160,80,0.1)",
-            transition: "all 0.5s ease",
-          }} />
-
-          {/* The main orb */}
-          <div
-            className={
-              orbState === "idle" ? "orb-breathe" :
-              orbState === "connecting" ? "orb-connect" :
-              orbState === "listening" ? "orb-listen" :
-              "orb-speak"
-            }
-            style={{
-              width: 160,
-              height: 160,
-              borderRadius: "50%",
-              background: orbState === "speaking"
-                ? "radial-gradient(circle at 35% 35%, #f5d48a 0%, #d4a050 35%, #b8863c 60%, #7a5520 85%, #2a1a08 100%)"
-                : orbState === "listening"
-                ? "radial-gradient(circle at 35% 35%, #e8c070 0%, #c4903c 35%, #a07030 60%, #6a4818 85%, #1a0e04 100%)"
-                : "radial-gradient(circle at 35% 35%, #c8a060 0%, #a07030 35%, #805020 60%, #4a2e10 85%, #0a0604 100%)",
-              boxShadow: orbState === "speaking"
-                ? "0 0 80px rgba(212,160,80,0.6), 0 0 140px rgba(212,160,80,0.3), 0 0 200px rgba(212,160,80,0.1)"
-                : orbState === "listening"
-                ? "0 0 50px rgba(180,130,60,0.4), 0 0 100px rgba(180,130,60,0.2)"
-                : "0 0 40px rgba(140,100,40,0.3), 0 0 80px rgba(140,100,40,0.1)",
-              transition: "background 0.5s ease, box-shadow 0.5s ease",
-              cursor: !isActive ? "pointer" : "default",
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            {/* Inner shimmer */}
-            <div style={{
-              position: "absolute",
-              top: "15%",
-              left: "20%",
-              width: "35%",
-              height: "30%",
-              borderRadius: "50%",
-              background: "rgba(255,255,255,0.15)",
-              filter: "blur(8px)",
-            }} />
-          </div>
-        </div>
-
-        {/* Status text */}
-        <div style={{ textAlign: "center", minHeight: 60, animation: "fadeUp 1s ease both", animationDelay: "0.2s" }}>
-          {!isActive && orbState !== "connecting" && (
-            <>
-              <p style={{
-                fontSize: "1rem",
-                color: "rgba(255,255,255,0.5)",
-                fontStyle: "italic",
-                marginBottom: 8,
-              }}>
-                {COMPANION_PRESENCE[companionType]}
-              </p>
-              <p style={{
-                fontSize: "0.7rem",
-                color: "rgba(255,255,255,0.2)",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-              }}>
-                Tap to connect
-              </p>
-            </>
+        {/* Transcript display */}
+        <div style={{
+          textAlign: "center", minHeight: 60, maxWidth: 320, padding: "0 24px",
+        }}>
+          {!isActive && !connecting && (
+            <p style={{
+              fontSize: 11, color: "rgba(255,255,255,0.2)",
+              letterSpacing: "0.25em", textTransform: "uppercase",
+            }}>
+              Tap to connect
+            </p>
           )}
-          {orbState === "connecting" && (
-            <p style={{ fontSize: "0.8rem", color: "rgba(212,160,80,0.6)", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+          {connecting && (
+            <p style={{
+              fontSize: 12, color: `rgba(${pr},${pg},${pb},0.6)`,
+              letterSpacing: "0.2em", textTransform: "uppercase",
+            }}>
               Connecting...
             </p>
           )}
-          {isActive && orbState === "listening" && (
-            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.4)", fontStyle: "italic" }}>
-              {companionName} is listening...
+          {isActive && transcript && (
+            <p style={{
+              fontSize: 14, color: `rgba(${pr},${pg},${pb},0.8)`,
+              fontStyle: "italic", lineHeight: 1.6,
+              transition: "color 1.5s ease",
+            }}>
+              "{transcript}"
             </p>
           )}
-          {isActive && orbState === "speaking" && greeting && (
-            <p style={{
-              fontSize: "0.9rem",
-              color: "rgba(212,160,80,0.8)",
-              fontStyle: "italic",
-              maxWidth: 300,
-              lineHeight: 1.6,
-            }}>
-              "{greeting}"
+          {status && (
+            <p style={{ fontSize: 12, color: "rgba(255,80,80,0.7)", letterSpacing: "0.1em" }}>
+              {status}
             </p>
           )}
         </div>
 
         {/* Controls */}
-        <div style={{ display: "flex", gap: 20, alignItems: "center", animation: "fadeUp 1.2s ease both", animationDelay: "0.4s" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           {!isActive ? (
             <button
               onClick={startCall}
-              disabled={orbState === "connecting"}
+              disabled={connecting}
               style={{
-                width: 72,
-                height: 72,
-                borderRadius: "50%",
-                background: "linear-gradient(135deg, #d4a050, #b8863c)",
-                border: "none",
-                cursor: orbState === "connecting" ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0 0 30px rgba(212,160,80,0.4)",
-                transition: "all 0.3s ease",
-                opacity: orbState === "connecting" ? 0.6 : 1,
+                width: 68, height: 68, borderRadius: "50%", border: "none",
+                background: `linear-gradient(135deg, rgb(${pr},${pg},${pb}), rgb(${Math.round(pr*0.6)},${Math.round(pg*0.6)},${Math.round(pb*0.4)}))`,
+                cursor: connecting ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: `0 0 40px rgba(${pr},${pg},${pb},0.5)`,
+                opacity: connecting ? 0.5 : 1,
+                transition: "all 0.4s ease",
               }}
             >
-              <Phone size={28} color="#050505" />
+              <Phone size={26} color="#000" />
             </button>
           ) : (
             <>
               <button
                 onClick={toggleMute}
                 style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: "50%",
-                  background: muted ? "rgba(220,50,50,0.2)" : "rgba(255,255,255,0.05)",
-                  border: `1px solid ${muted ? "rgba(220,50,50,0.5)" : "rgba(255,255,255,0.1)"}`,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  width: 52, height: 52, borderRadius: "50%",
+                  border: `1px solid ${muted ? "rgba(220,60,60,0.5)" : "rgba(255,255,255,0.12)"}`,
+                  background: muted ? "rgba(220,60,60,0.15)" : "rgba(255,255,255,0.05)",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                   transition: "all 0.3s ease",
                 }}
               >
-                {muted
-                  ? <MicOff size={20} color="rgba(220,100,100,0.9)" />
-                  : <Mic size={20} color="rgba(255,255,255,0.6)" />
-                }
+                {muted ? <MicOff size={20} color="rgba(220,100,100,0.9)" /> : <Mic size={20} color="rgba(255,255,255,0.6)" />}
               </button>
-
               <button
                 onClick={endCall}
                 style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: "50%",
-                  background: "rgba(220,50,50,0.2)",
-                  border: "1px solid rgba(220,50,50,0.4)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow: "0 0 20px rgba(220,50,50,0.2)",
+                  width: 68, height: 68, borderRadius: "50%",
+                  border: "1px solid rgba(220,60,60,0.4)",
+                  background: "rgba(220,60,60,0.2)",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: "0 0 20px rgba(220,60,60,0.2)",
                   transition: "all 0.3s ease",
                 }}
               >
-                <PhoneOff size={28} color="rgba(220,100,100,0.9)" />
+                <PhoneOff size={26} color="rgba(220,100,100,0.9)" />
               </button>
             </>
           )}
         </div>
 
-        {/* Bottom line */}
         <p style={{
-          fontSize: "0.6rem",
-          color: "rgba(255,255,255,0.1)",
-          letterSpacing: "0.25em",
-          textTransform: "uppercase",
-          animation: "fadeUp 1.5s ease both",
-          animationDelay: "0.6s",
+          fontSize: 9, color: "rgba(255,255,255,0.08)",
+          letterSpacing: "0.3em", textTransform: "uppercase",
         }}>
-          DAD · Your career guide
+          DAD · Dreams. Actions. Destiny.
         </p>
       </div>
     </div>
