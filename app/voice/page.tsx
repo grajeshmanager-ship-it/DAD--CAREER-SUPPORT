@@ -178,19 +178,6 @@ export default function VoicePage() {
     } catch { /* silent */ }
   }, [spawnEffects]);
 
-  // Build context-aware first message
-  const buildFirstMessage = useCallback((greeting: string) => {
-    if (!profile) return greeting;
-    const parts: string[] = [greeting];
-    if (profile.resume_summary) {
-      parts.push(`I've already looked at your CV — ${profile.resume_summary.slice(0, 120)}...`);
-    }
-    if (profile.career_path) {
-      parts.push(`I know you're working toward ${profile.career_path}.`);
-    }
-    return parts.join(" ");
-  }, [profile]);
-
   // Canvas animation
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -281,26 +268,21 @@ export default function VoicePage() {
       const skin="#e8c49a", hair="#2d1f0e", pants="#3d4a5c", shoe="#222";
       ctx.save(); ctx.translate(cx, groundY); ctx.rotate(bodyTilt);
 
-      // Shadow
       ctx.save(); ctx.scale(1.1, 0.15);
       const sg = ctx.createRadialGradient(0,0,0,0,0,55);
       sg.addColorStop(0,"rgba(0,0,0,0.35)"); sg.addColorStop(1,"rgba(0,0,0,0)");
       ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(0,0,55,0,Math.PI*2); ctx.fill(); ctx.restore();
 
-      // LEFT LEG
       ctx.save(); ctx.translate(-18,60+bodyBob); ctx.rotate(leftLeg);
       ctx.fillStyle=pants; ctx.beginPath(); ctx.roundRect(-9,0,18,55,4); ctx.fill();
       ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill(); ctx.restore();
 
-      // RIGHT LEG
       ctx.save(); ctx.translate(18,60+bodyBob); ctx.rotate(rightLeg);
       ctx.fillStyle=pants; ctx.beginPath(); ctx.roundRect(-9,0,18,55,4); ctx.fill();
       ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill(); ctx.restore();
 
-      // TORSO
       ctx.fillStyle=shirtColor; ctx.beginPath(); ctx.roundRect(-33,-20+bodyBob,66,80,8); ctx.fill();
 
-      // LEFT ARM
       ctx.save(); ctx.translate(-33,-10+bodyBob); ctx.rotate(leftArm);
       ctx.fillStyle=shirtColor; ctx.beginPath(); ctx.roundRect(-10,0,18,58,6); ctx.fill();
       ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(-1,61,10,0,Math.PI*2); ctx.fill();
@@ -313,7 +295,6 @@ export default function VoicePage() {
       }
       ctx.restore();
 
-      // RIGHT ARM
       ctx.save(); ctx.translate(33,-10+bodyBob); ctx.rotate(rightArm);
       ctx.fillStyle=shirtColor; ctx.beginPath(); ctx.roundRect(-8,0,18,58,6); ctx.fill();
       ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(1,61,10,0,Math.PI*2); ctx.fill();
@@ -328,25 +309,20 @@ export default function VoicePage() {
       }
       ctx.restore();
 
-      // NECK
       ctx.fillStyle=skin; ctx.beginPath(); ctx.roundRect(-10,-28+bodyBob,20,16,3); ctx.fill();
 
-      // HEAD
       ctx.save(); ctx.translate(0,-62+bodyBob+headBob); ctx.rotate(headTilt);
       ctx.fillStyle=skin; ctx.beginPath(); ctx.ellipse(0,0,33,37,0,0,Math.PI*2); ctx.fill();
 
-      // Hair
       ctx.fillStyle=hair;
       ctx.beginPath(); ctx.ellipse(0,-22,33,19,0,Math.PI,Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.ellipse(-29,-8,9,15,-0.5,0,Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.ellipse(29,-8,9,15,0.5,0,Math.PI*2); ctx.fill();
 
-      // Ears
       ctx.fillStyle=skin;
       ctx.beginPath(); ctx.ellipse(-34,2,7,10,0,0,Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.ellipse(34,2,7,10,0,0,Math.PI*2); ctx.fill();
 
-      // Eyes
       const blinkH = blink ? 1 : 8;
       ctx.fillStyle="#fff";
       ctx.beginPath(); ctx.ellipse(-12,-4,7,blinkH,0,0,Math.PI*2); ctx.fill();
@@ -365,11 +341,9 @@ export default function VoicePage() {
         ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(8,0); ctx.stroke(); ctx.restore();
       }
 
-      // Nose
       ctx.strokeStyle="#c4956a"; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.moveTo(0,-2); ctx.lineTo(-4,6); ctx.moveTo(4,6); ctx.lineTo(-4,6); ctx.stroke();
 
-      // Mouth
       ctx.strokeStyle="#8b5e3c"; ctx.lineWidth=2.5; ctx.lineCap="round";
       if (mouthType==="smile") { ctx.beginPath(); ctx.arc(0,8,12,0.2,Math.PI-0.2); ctx.stroke(); }
       else if (mouthType==="bigsmile") {
@@ -386,7 +360,6 @@ export default function VoicePage() {
       }
       else { ctx.beginPath(); ctx.moveTo(-8,10); ctx.lineTo(8,10); ctx.stroke(); }
 
-      // Thought bubble
       if (emo==="thinking") {
         const alpha=0.6+Math.sin(tRef.current*0.04)*0.3;
         ctx.save(); ctx.globalAlpha=alpha;
@@ -401,8 +374,8 @@ export default function VoicePage() {
         ctx.restore();
       }
 
-      ctx.restore(); // head
-      ctx.restore(); // body
+      ctx.restore();
+      ctx.restore();
     }
 
     const draw = () => {
@@ -444,7 +417,6 @@ export default function VoicePage() {
 
       drawCharacter(cx, groundY, t, emo, blink);
 
-      // Particles
       particlesRef.current = particlesRef.current.filter(p => {
         p.life -= p.decay; if (p.life<=0) return false;
         p.vy += 0.15; p.vx *= 0.99; p.x += p.vx; p.y += p.vy;
@@ -453,7 +425,6 @@ export default function VoicePage() {
         ctx.globalAlpha = 1; return true;
       });
 
-      // Floating items
       floatingRef.current = floatingRef.current.filter(fi => {
         fi.life -= fi.decay; if (fi.life<=0) return false;
         fi.x += fi.vx; fi.y += fi.vy;
@@ -466,7 +437,6 @@ export default function VoicePage() {
         return true;
       });
 
-      // Ambient particles
       const shirtC = SHIRT_COLORS[emo];
       if (Math.random() < 0.25) {
         particlesRef.current.push({
@@ -504,8 +474,7 @@ export default function VoicePage() {
 
     const type = profile?.companion_type || "dad";
     const greetings = COMPANION_GREETINGS[type] || COMPANION_GREETINGS.dad;
-    const baseGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-    const firstMessage = buildFirstMessage(baseGreeting);
+    const firstMessage = greetings[Math.floor(Math.random() * greetings.length)];
 
     setConnecting(true);
     setStatus("Connecting...");
@@ -572,8 +541,6 @@ export default function VoicePage() {
   const formatDuration = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const companionType = profile?.companion_type || "dad";
   const companionName = profile?.companion_name || "DAD";
-
-  // Context badge
   const hasContext = profile?.resume_summary || profile?.career_path;
 
   return (
