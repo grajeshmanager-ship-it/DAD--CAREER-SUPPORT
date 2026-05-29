@@ -8,7 +8,7 @@ import {
   TrendingUp, Target, BookOpen, Briefcase, ArrowLeft, AlertCircle
 } from "lucide-react";
 import Link from "next/link";
-import { DadLoading } from "@/components/ui/dad-loading";
+import DadLoading from "@/components/ui/dad-loading";
 
 interface SkillGap {
   skill: string;
