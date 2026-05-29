@@ -232,17 +232,7 @@ export default function InterviewPage() {
     setError(null);
   };
 
-  if (loading) {
-    return (
-      <DadLoading
-        message={
-          stage === "setup"
-            ? "DAD is analysing the job description..."
-            : "DAD is reviewing your answers..."
-        }
-      />
-    );
-  }
+  if (loading) return <DadLoading />;
 
   return (
     <div className="min-h-screen bg-background">
