@@ -14,28 +14,7 @@ interface Profile {
   companion_name: string;
 }
 
-type Emotion = "idle" | "happy" | "excited" | "sad" | "empathetic" | "proud" | "serious" | "concerned";
-
-const EMOTIONS: Record<Emotion, {
-  primary: [number, number, number];
-  secondary: [number, number, number];
-  bg: [number, number, number];
-  speed: number;
-  pulseAmp: number;
-  particleCount: number;
-  particleSpeed: number;
-  waveCount: number;
-  label: string;
-}> = {
-  idle:      { primary: [212,160,80],  secondary: [122,85,32],   bg: [10,6,2],    speed: 0.4, pulseAmp: 0.06, particleCount: 15,  particleSpeed: 0.3, waveCount: 2, label: "..." },
-  happy:     { primary: [255,210,0],   secondary: [255,140,0],   bg: [20,14,0],   speed: 1.4, pulseAmp: 0.14, particleCount: 90,  particleSpeed: 1.4, waveCount: 6, label: "Happy" },
-  excited:   { primary: [255,90,40],   secondary: [255,40,10],   bg: [18,6,2],    speed: 2.2, pulseAmp: 0.22, particleCount: 130, particleSpeed: 2.2, waveCount: 9, label: "Excited" },
-  sad:       { primary: [70,120,200],  secondary: [30,60,120],   bg: [4,8,18],    speed: 0.2, pulseAmp: 0.03, particleCount: 10,  particleSpeed: 0.1, waveCount: 1, label: "Sad" },
-  empathetic:{ primary: [160,90,210],  secondary: [90,40,140],   bg: [10,4,18],   speed: 0.3, pulseAmp: 0.05, particleCount: 22,  particleSpeed: 0.2, waveCount: 2, label: "Empathetic" },
-  proud:     { primary: [40,200,100],  secondary: [20,120,60],   bg: [2,14,6],    speed: 1.0, pulseAmp: 0.11, particleCount: 70,  particleSpeed: 1.0, waveCount: 5, label: "Proud" },
-  serious:   { primary: [160,160,160], secondary: [80,80,80],    bg: [8,8,8],     speed: 0.5, pulseAmp: 0.04, particleCount: 12,  particleSpeed: 0.15,waveCount: 2, label: "Serious" },
-  concerned: { primary: [230,130,30],  secondary: [160,80,10],   bg: [14,8,2],    speed: 0.6, pulseAmp: 0.07, particleCount: 30,  particleSpeed: 0.5, waveCount: 3, label: "Concerned" },
-};
+type Emotion = "idle" | "talking" | "happy" | "excited" | "sad" | "empathetic" | "proud" | "thinking";
 
 const COMPANION_GREETINGS: Record<string, string[]> = {
   dad:     ["Hey. There's my kid. You okay?", "Hey. Good to hear your voice. Everything alright?", "Oh hey — I was just thinking about you. You good?"],
@@ -54,21 +33,32 @@ const COMPANION_LABELS: Record<string, string> = {
   teacher: "Teacher", mentor: "Mentor", friend: "Friend", partner: "Partner", self: "Yourself",
 };
 
+const EMOTION_LABELS: Record<Emotion, string> = {
+  idle: "Here with you...",
+  talking: "Speaking...",
+  happy: "So happy for you!",
+  excited: "Let's go!!",
+  sad: "Feeling your pain...",
+  empathetic: "I hear you...",
+  proud: "So proud of you!",
+  thinking: "Let me think...",
+};
+
+const SHIRT_COLORS: Record<Emotion, string> = {
+  idle: "#d4a050",
+  talking: "#d4a050",
+  happy: "#FFD700",
+  excited: "#FF6B35",
+  sad: "#4a7ab5",
+  empathetic: "#9b59b6",
+  proud: "#27ae60",
+  thinking: "#888888",
+};
+
 const VAPI_ASSISTANT_ID = "1312a1bf-ea33-48f7-aa21-1f16e414e885";
 
-interface Particle {
-  x: number; y: number;
-  vx: number; vy: number;
-  size: number; life: number; decay: number;
-  r: number; g: number; b: number;
-}
-
-interface Wave {
-  x: number; y: number;
-  radius: number; life: number; decay: number;
-  r: number; g: number; b: number;
-  delay: number;
-}
+interface Particle { x:number; y:number; vx:number; vy:number; size:number; life:number; decay:number; color:string; }
+interface FloatingItem { x:number; y:number; vx:number; vy:number; life:number; decay:number; size:number; color:string; type:"star"|"heart"|"dot"; angle?:number; spin?:number; }
 
 export default function VoicePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -81,16 +71,14 @@ export default function VoicePage() {
   const [connecting, setConnecting] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fxCanvasRef = useRef<HTMLCanvasElement>(null);
   const vapiRef = useRef<Vapi | null>(null);
   const emotionRef = useRef<Emotion>("idle");
   const particlesRef = useRef<Particle[]>([]);
-  const wavesRef = useRef<Wave[]>([]);
+  const floatingRef = useRef<FloatingItem[]>([]);
   const frameRef = useRef<number>(0);
   const tRef = useRef(0);
   const analyzeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const currentPrimaryRef = useRef<[number,number,number]>([212,160,80]);
-  const currentBgRef = useRef<[number,number,number]>([10,6,2]);
+  const isActiveRef = useRef(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -110,42 +98,58 @@ export default function VoicePage() {
     return () => clearInterval(interval);
   }, [isActive]);
 
-  const lerpColor = (a: [number,number,number], b: [number,number,number], t: number): [number,number,number] => [
-    Math.round(a[0] + (b[0]-a[0])*t),
-    Math.round(a[1] + (b[1]-a[1])*t),
-    Math.round(a[2] + (b[2]-a[2])*t),
-  ];
+  useEffect(() => { emotionRef.current = emotion; }, [emotion]);
+  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
 
-  const spawnBurst = useCallback((em: Emotion) => {
-    const canvas = fxCanvasRef.current;
-    if (!canvas) return;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const e = EMOTIONS[em];
-    const [r,g,b] = e.primary;
-    for (let i = 0; i < e.particleCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const spd = (Math.random() * e.particleSpeed + e.particleSpeed * 0.3);
-      particlesRef.current.push({
-        x: cx, y: cy,
-        vx: Math.cos(angle) * spd,
-        vy: Math.sin(angle) * spd - Math.random() * spd * 0.5,
-        size: Math.random() * e.particleCount / 40 + 0.8,
-        life: 1, decay: Math.random() * 0.015 + 0.006,
-        r, g, b,
-      });
+  const spawnEffects = useCallback((emo: Emotion, cx: number, cy: number) => {
+    if (emo === "happy") {
+      for (let i = 0; i < 25; i++) {
+        const colors = ["#FFD700","#FF8C00","#fff","#FFA500"];
+        particlesRef.current.push({
+          x: cx+(Math.random()-0.5)*80, y: cy-180,
+          vx: (Math.random()-0.5)*5, vy: -(Math.random()*6+3),
+          size: Math.random()*4+2, life: 1, decay: 0.013,
+          color: colors[Math.floor(Math.random()*colors.length)],
+        });
+      }
     }
-    for (let i = 0; i < e.waveCount; i++) {
-      wavesRef.current.push({
-        x: cx, y: cy,
-        radius: 80, life: 1, decay: 0.007,
-        r, g, b, delay: i * 0.18,
-      });
+    if (emo === "excited") {
+      for (let i = 0; i < 40; i++) {
+        const colors = ["#FF6B35","#FFD700","#fff","#FF3D00","#FFC300"];
+        particlesRef.current.push({
+          x: cx+(Math.random()-0.5)*100, y: cy-160,
+          vx: (Math.random()-0.5)*8, vy: -(Math.random()*9+4),
+          size: Math.random()*5+2, life: 1, decay: 0.011,
+          color: colors[Math.floor(Math.random()*colors.length)],
+        });
+      }
+    }
+    if (emo === "proud") {
+      for (let i = 0; i < 15; i++) {
+        floatingRef.current.push({
+          x: cx+(Math.random()-0.5)*120, y: cy-220+(Math.random()-0.5)*60,
+          vx: (Math.random()-0.5)*0.5, vy: -(Math.random()*1+0.3),
+          life: 1, decay: 0.008, size: Math.random()*14+8,
+          color: "#FFD700", type: "star",
+          angle: Math.random()*Math.PI*2, spin: (Math.random()-0.5)*0.1,
+        });
+      }
+    }
+    if (emo === "empathetic" || emo === "sad") {
+      for (let i = 0; i < 8; i++) {
+        floatingRef.current.push({
+          x: cx+(Math.random()-0.5)*60, y: cy-220,
+          vx: (Math.random()-0.5)*0.8, vy: -(Math.random()*1.5+0.5),
+          life: 1, decay: 0.007, size: Math.random()*12+8,
+          color: emo === "empathetic" ? "#c39bd3" : "#4a7ab5",
+          type: "heart",
+        });
+      }
     }
   }, []);
 
   const analyzeEmotion = useCallback(async (text: string) => {
-    if (!text || text.length < 10) return;
+    if (!text || text.length < 8) return;
     try {
       const res = await fetch("/api/analyze-emotion", {
         method: "POST",
@@ -155,172 +159,335 @@ export default function VoicePage() {
       if (!res.ok) return;
       const { emotion: detected } = await res.json();
       if (detected && detected !== emotionRef.current) {
-        emotionRef.current = detected;
-        setEmotion(detected);
-        spawnBurst(detected);
+        emotionRef.current = detected as Emotion;
+        setEmotion(detected as Emotion);
+        const canvas = canvasRef.current;
+        if (canvas) spawnEffects(detected as Emotion, canvas.width/2, canvas.height*0.55);
       }
     } catch { /* silent */ }
-  }, [spawnBurst]);
+  }, [spawnEffects]);
 
+  // Canvas draw
   useEffect(() => {
-    emotionRef.current = emotion;
-  }, [emotion]);
-
-  // Canvas animation loop
-  useEffect(() => {
-    const bgCanvas = canvasRef.current;
-    const fxCanvas = fxCanvasRef.current;
-    if (!bgCanvas || !fxCanvas) return;
-
-    const bc = bgCanvas.getContext("2d")!;
-    const fc = fxCanvas.getContext("2d")!;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
 
     const resize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      bgCanvas.width = fxCanvas.width = w;
-      bgCanvas.height = fxCanvas.height = h;
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
     };
     resize();
-    window.addEventListener("resize", resize);
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+
+    function drawStar(x: number, y: number, r: number, color: string, alpha: number) {
+      ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = color;
+      ctx.translate(x, y); ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = i*Math.PI*2/5-Math.PI/2;
+        const a2 = a+Math.PI/5;
+        if (i===0) ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r);
+        else ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+        ctx.lineTo(Math.cos(a2)*(r*0.4), Math.sin(a2)*(r*0.4));
+      }
+      ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+
+    function drawHeart(x: number, y: number, size: number, color: string, alpha: number) {
+      ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = color;
+      ctx.translate(x, y); ctx.beginPath();
+      ctx.moveTo(0, size*0.3);
+      ctx.bezierCurveTo(0,-size*0.3,-size,-size*0.3,-size,size*0.1);
+      ctx.bezierCurveTo(-size,size*0.6,0,size,0,size);
+      ctx.bezierCurveTo(0,size,size,size*0.6,size,size*0.1);
+      ctx.bezierCurveTo(size,-size*0.3,0,-size*0.3,0,size*0.3);
+      ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+
+    function drawCharacter(cx: number, groundY: number, t: number, emo: Emotion, blink: boolean) {
+      const s = Math.sin(t*0.02);
+      const s2 = Math.sin(t*0.04);
+      const s3 = Math.sin(t*0.06);
+
+      // Pose per emotion
+      let bodyBob=s*3, bodyTilt=s*0.01;
+      let leftArm=0.15+s*0.03, rightArm=-0.15+s*0.03;
+      let leftLeg=0, rightLeg=0;
+      let headBob=s*2, headTilt=s*0.02;
+      let mouthType:"neutral"|"smile"|"bigsmile"|"sad"|"talking"|"o" = "neutral";
+      let lBrow=0, rBrow=0;
+      let rightHandObj="";
+      let leftHandObj="paper";
+      const shirtColor = SHIRT_COLORS[emo];
+
+      if (emo==="idle") {
+        bodyBob=s*3; leftArm=0.15+s*0.03; rightArm=-0.15+s*0.03;
+        headTilt=s*0.02; mouthType="neutral"; leftHandObj="paper";
+      } else if (emo==="talking") {
+        bodyBob=s*4; bodyTilt=s*0.02;
+        leftArm=-0.3+s2*0.15; rightArm=-0.8+s3*0.3;
+        headBob=s2*3; headTilt=s*0.05;
+        mouthType="talking"; lBrow=-0.1; rBrow=0.1;
+        rightHandObj="point"; leftHandObj="";
+      } else if (emo==="happy") {
+        const jump=Math.abs(s)*-10;
+        bodyBob=jump; bodyTilt=s*0.03;
+        leftArm=-0.8+s*0.2; rightArm=-0.8+s*0.2;
+        leftLeg=s*0.12; rightLeg=-s*0.12;
+        headBob=jump*0.5; headTilt=s*0.08;
+        mouthType="bigsmile"; lBrow=-0.2; rBrow=-0.2; leftHandObj="";
+      } else if (emo==="excited") {
+        const bounce=Math.abs(Math.sin(t*0.07))*-22;
+        bodyBob=bounce; bodyTilt=s3*0.06;
+        leftArm=-1.3+s3*0.3; rightArm=-1.3+s2*0.3;
+        leftLeg=s2*0.18; rightLeg=-s2*0.18;
+        headBob=bounce*0.4; headTilt=s3*0.14;
+        mouthType="o"; lBrow=-0.3; rBrow=-0.3;
+        rightHandObj="thumbup"; leftHandObj="";
+      } else if (emo==="sad") {
+        bodyBob=10+s*2; bodyTilt=-0.08+s*0.01;
+        leftArm=0.45; rightArm=-0.45;
+        headBob=12+s*1; headTilt=-0.18+s*0.02;
+        mouthType="sad"; lBrow=0.25; rBrow=-0.25; leftHandObj="";
+      } else if (emo==="empathetic") {
+        bodyBob=6+s*2; bodyTilt=s*0.015;
+        leftArm=-0.55+s*0.05; rightArm=-0.65+s*0.05;
+        headBob=5+s*2; headTilt=0.14+s*0.02;
+        mouthType="sad"; lBrow=0.15; rBrow=-0.15; leftHandObj="";
+      } else if (emo==="proud") {
+        bodyBob=s*3; bodyTilt=s*0.01;
+        leftArm=0.1; rightArm=-1.05+s*0.05;
+        leftLeg=0.05; rightLeg=-0.05;
+        headBob=s*2; headTilt=-0.05;
+        mouthType="smile"; lBrow=-0.15; rBrow=-0.15;
+        rightHandObj="thumbup"; leftHandObj="";
+      } else if (emo==="thinking") {
+        bodyBob=s*2; bodyTilt=-0.04;
+        leftArm=0.1; rightArm=-1.15;
+        headBob=2+s*2; headTilt=0.12+s*0.03;
+        mouthType="neutral"; lBrow=0.12; rBrow=-0.22; leftHandObj="";
+      }
+
+      const skin="#e8c49a", hair="#2d1f0e", pants="#3d4a5c", shoe="#222";
+
+      ctx.save();
+      ctx.translate(cx, groundY);
+
+      // Shadow
+      ctx.save();
+      ctx.scale(1.1, 0.15);
+      const sg = ctx.createRadialGradient(0,0,0,0,0,55);
+      sg.addColorStop(0,"rgba(0,0,0,0.35)");
+      sg.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(0,0,55,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      ctx.rotate(bodyTilt);
+
+      // LEFT LEG
+      ctx.save(); ctx.translate(-18, 60+bodyBob); ctx.rotate(leftLeg);
+      ctx.fillStyle=pants; ctx.beginPath(); ctx.roundRect(-9,0,18,55,4); ctx.fill();
+      ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // RIGHT LEG
+      ctx.save(); ctx.translate(18, 60+bodyBob); ctx.rotate(rightLeg);
+      ctx.fillStyle=pants; ctx.beginPath(); ctx.roundRect(-9,0,18,55,4); ctx.fill();
+      ctx.fillStyle=shoe; ctx.beginPath(); ctx.ellipse(0,57,13,7,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // TORSO
+      ctx.fillStyle=shirtColor;
+      ctx.beginPath(); ctx.roundRect(-33,-20+bodyBob,66,80,8); ctx.fill();
+
+      // LEFT ARM
+      ctx.save(); ctx.translate(-33,-10+bodyBob); ctx.rotate(leftArm);
+      ctx.fillStyle=shirtColor; ctx.beginPath(); ctx.roundRect(-10,0,18,58,6); ctx.fill();
+      ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(-1,61,10,0,Math.PI*2); ctx.fill();
+      if (leftHandObj==="paper") {
+        ctx.fillStyle="#f5f0e8"; ctx.save(); ctx.translate(-1,61); ctx.rotate(-0.3);
+        ctx.beginPath(); ctx.roundRect(-8,-12,16,24,2); ctx.fill();
+        ctx.strokeStyle="#ddd"; ctx.lineWidth=0.5;
+        for (let i=-6;i<6;i+=4) { ctx.beginPath(); ctx.moveTo(-6,i); ctx.lineTo(6,i); ctx.stroke(); }
+        ctx.restore();
+      }
+      ctx.restore();
+
+      // RIGHT ARM
+      ctx.save(); ctx.translate(33,-10+bodyBob); ctx.rotate(rightArm);
+      ctx.fillStyle=shirtColor; ctx.beginPath(); ctx.roundRect(-8,0,18,58,6); ctx.fill();
+      ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(1,61,10,0,Math.PI*2); ctx.fill();
+      if (rightHandObj==="point") {
+        ctx.fillStyle=skin; ctx.save(); ctx.translate(1,61);
+        ctx.beginPath(); ctx.roundRect(-4,-4,28,8,4); ctx.fill();
+        ctx.restore();
+      }
+      if (rightHandObj==="thumbup") {
+        ctx.fillStyle=skin; ctx.save(); ctx.translate(1,61); ctx.rotate(-0.3);
+        ctx.beginPath(); ctx.roundRect(-5,-5,10,22,4); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(-5,-18,24,12,4); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+
+      // NECK
+      ctx.fillStyle=skin; ctx.beginPath(); ctx.roundRect(-10,-28+bodyBob,20,16,3); ctx.fill();
+
+      // HEAD
+      ctx.save(); ctx.translate(0,-62+bodyBob+headBob); ctx.rotate(headTilt);
+
+      ctx.fillStyle=skin; ctx.beginPath(); ctx.ellipse(0,0,33,37,0,0,Math.PI*2); ctx.fill();
+
+      // Hair
+      ctx.fillStyle=hair;
+      ctx.beginPath(); ctx.ellipse(0,-22,33,19,0,Math.PI,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-29,-8,9,15,-0.5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(29,-8,9,15,0.5,0,Math.PI*2); ctx.fill();
+
+      // Ears
+      ctx.fillStyle=skin;
+      ctx.beginPath(); ctx.ellipse(-34,2,7,10,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(34,2,7,10,0,0,Math.PI*2); ctx.fill();
+
+      // Eyes
+      const blinkH = blink ? 1 : 8;
+      ctx.fillStyle="#fff";
+      ctx.beginPath(); ctx.ellipse(-12,-4,7,blinkH,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(12,-4,7,blinkH,0,0,Math.PI*2); ctx.fill();
+      if (!blink) {
+        ctx.fillStyle="#3d2b1a";
+        ctx.beginPath(); ctx.arc(-12,-4,4,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(12,-4,4,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#fff";
+        ctx.beginPath(); ctx.arc(-10,-5,1.5,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(14,-5,1.5,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle=hair; ctx.lineWidth=2.5; ctx.lineCap="round";
+        ctx.save(); ctx.translate(-12,-14); ctx.rotate(lBrow);
+        ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(8,0); ctx.stroke(); ctx.restore();
+        ctx.save(); ctx.translate(12,-14); ctx.rotate(rBrow);
+        ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(8,0); ctx.stroke(); ctx.restore();
+      }
+
+      // Nose
+      ctx.strokeStyle="#c4956a"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(0,-2); ctx.lineTo(-4,6); ctx.moveTo(4,6); ctx.lineTo(-4,6); ctx.stroke();
+
+      // Mouth
+      ctx.strokeStyle="#8b5e3c"; ctx.lineWidth=2.5; ctx.lineCap="round";
+      if (mouthType==="smile") { ctx.beginPath(); ctx.arc(0,8,12,0.2,Math.PI-0.2); ctx.stroke(); }
+      else if (mouthType==="bigsmile") {
+        ctx.fillStyle="#8b5e3c"; ctx.beginPath(); ctx.arc(0,8,14,0.1,Math.PI-0.1); ctx.fill();
+        ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(0,10,10,0.2,Math.PI-0.2); ctx.fill();
+      }
+      else if (mouthType==="sad") { ctx.beginPath(); ctx.arc(0,18,12,Math.PI+0.2,-0.2); ctx.stroke(); }
+      else if (mouthType==="talking") {
+        const mo=Math.sin(tRef.current*0.3)*5;
+        ctx.fillStyle="#6b3c2a"; ctx.beginPath(); ctx.ellipse(0,10,8,4+mo,0,0,Math.PI*2); ctx.fill();
+      }
+      else if (mouthType==="o") {
+        ctx.fillStyle="#6b3c2a"; ctx.beginPath(); ctx.arc(0,10,9,0,Math.PI*2); ctx.fill();
+      }
+      else { ctx.beginPath(); ctx.moveTo(-8,10); ctx.lineTo(8,10); ctx.stroke(); }
+
+      // Thought bubble (thinking)
+      if (emo==="thinking") {
+        const alpha=0.6+Math.sin(tRef.current*0.04)*0.3;
+        ctx.save(); ctx.globalAlpha=alpha;
+        ctx.fillStyle="rgba(180,180,180,0.18)"; ctx.strokeStyle="rgba(200,200,200,0.35)"; ctx.lineWidth=1.5;
+        const bx=50, by=-60;
+        [5,8,12].forEach((r,i) => {
+          ctx.beginPath(); ctx.arc(bx-25+i*18,by+28-i*10,r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        });
+        ctx.beginPath(); ctx.roundRect(bx+5,by-28,70,44,10); ctx.fill(); ctx.stroke();
+        ctx.globalAlpha=alpha*0.7; ctx.fillStyle="#ccc"; ctx.font="bold 20px sans-serif"; ctx.textAlign="center";
+        ctx.fillText("...", bx+40, by-2);
+        ctx.restore();
+      }
+
+      ctx.restore(); // head
+      ctx.restore(); // body
+    }
 
     const draw = () => {
-      const w = bgCanvas.width;
-      const h = bgCanvas.height;
-      const cx = w / 2;
-      const cy = h / 2;
+      const W = canvas.width, H = canvas.height;
+      const cx = W/2;
+      const groundY = H*0.76;
       const t = tRef.current++;
-      const em = emotionRef.current;
-      const e = EMOTIONS[em];
-
-      // Lerp background
-      currentBgRef.current = lerpColor(currentBgRef.current, e.bg, 0.025);
-      currentPrimaryRef.current = lerpColor(currentPrimaryRef.current, e.primary, 0.03);
-      const [br,bg2,bb] = currentBgRef.current;
-      const [pr,pg,pb] = currentPrimaryRef.current;
+      const emo = emotionRef.current;
+      const blink = (t % 160) < 4;
 
       // Background
-      const bgGrad = bc.createRadialGradient(cx, cy*1.1, 0, cx, cy, Math.max(w,h)*0.8);
-      bgGrad.addColorStop(0, `rgb(${br},${bg2},${bb})`);
-      bgGrad.addColorStop(1, "rgb(0,0,0)");
-      bc.fillStyle = bgGrad;
-      bc.fillRect(0, 0, w, h);
+      const bgColors: Record<Emotion, [string,string]> = {
+        idle:       ["#0f0c08","#000"],
+        talking:    ["#0a0a14","#000"],
+        happy:      ["#141000","#000"],
+        excited:    ["#160800","#000"],
+        sad:        ["#05080f","#000"],
+        empathetic: ["#0a0514","#000"],
+        proud:      ["#031006","#000"],
+        thinking:   ["#0a0a0a","#000"],
+      };
+      const [c1,c2] = bgColors[emo];
+      const bg = ctx.createLinearGradient(0,0,0,H);
+      bg.addColorStop(0,c1); bg.addColorStop(1,c2);
+      ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-      // Draw orb
-      const pulse = Math.sin(t * e.speed * 0.04) * e.pulseAmp;
-      const orbR = 90 + pulse * 90;
+      // Ground line
+      const gColors: Record<Emotion, string> = {
+        idle:"#1a1208",talking:"#12121a",happy:"#1a1600",excited:"#180c00",
+        sad:"#08101a",empathetic:"#100818",proud:"#041408",thinking:"#111"
+      };
+      const gg = ctx.createLinearGradient(0,groundY,0,H);
+      gg.addColorStop(0,gColors[emo]); gg.addColorStop(1,"#000");
+      ctx.fillStyle=gg; ctx.fillRect(0,groundY,W,H-groundY);
 
-      // Outer glow layers
-      for (let i = 3; i >= 1; i--) {
-        const glowR = orbR + i * 45 + Math.abs(pulse) * 80;
-        const alpha = (0.06 / i) * (0.6 + Math.abs(pulse) * 2);
-        const gGrad = bc.createRadialGradient(cx, cy, orbR * 0.3, cx, cy, glowR);
-        gGrad.addColorStop(0, `rgba(${pr},${pg},${pb},${alpha * 2})`);
-        gGrad.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
-        bc.fillStyle = gGrad;
-        bc.beginPath();
-        bc.arc(cx, cy, glowR, 0, Math.PI * 2);
-        bc.fill();
-      }
+      // Ambient light glow behind character
+      const glowColors: Record<Emotion, string> = {
+        idle:"rgba(212,160,80,0.06)",talking:"rgba(212,160,80,0.08)",
+        happy:"rgba(255,215,0,0.12)",excited:"rgba(255,107,53,0.15)",
+        sad:"rgba(74,122,181,0.08)",empathetic:"rgba(155,89,182,0.1)",
+        proud:"rgba(39,174,96,0.1)",thinking:"rgba(140,140,140,0.06)",
+      };
+      const glow = ctx.createRadialGradient(cx,groundY-100,20,cx,groundY-100,220);
+      glow.addColorStop(0,glowColors[emo]); glow.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=glow; ctx.fillRect(0,0,W,H);
 
-      // Main orb body
-      const orbGrad = bc.createRadialGradient(
-        cx - orbR * 0.28, cy - orbR * 0.28, 0,
-        cx, cy, orbR
-      );
-      orbGrad.addColorStop(0, `rgb(${Math.min(255,pr+90)},${Math.min(255,pg+90)},${Math.min(255,pb+50)})`);
-      orbGrad.addColorStop(0.35, `rgb(${pr},${pg},${pb})`);
-      orbGrad.addColorStop(0.7, `rgb(${Math.round(pr*0.45)},${Math.round(pg*0.45)},${Math.round(pb*0.3)})`);
-      orbGrad.addColorStop(1, `rgb(${Math.round(pr*0.08)},${Math.round(pg*0.07)},${Math.round(pb*0.04)})`);
-      bc.fillStyle = orbGrad;
-      bc.beginPath();
-      bc.arc(cx, cy, orbR, 0, Math.PI * 2);
-      bc.fill();
-
-      // Specular highlight
-      const specGrad = bc.createRadialGradient(
-        cx - orbR * 0.3, cy - orbR * 0.32, 0,
-        cx - orbR * 0.15, cy - orbR * 0.15, orbR * 0.5
-      );
-      specGrad.addColorStop(0, "rgba(255,255,255,0.22)");
-      specGrad.addColorStop(1, "rgba(255,255,255,0)");
-      bc.fillStyle = specGrad;
-      bc.beginPath();
-      bc.arc(cx, cy, orbR, 0, Math.PI * 2);
-      bc.fill();
-
-      // Emotion ripple rings on orb
-      if (em !== "idle" && em !== "serious") {
-        const ringCount = em === "excited" ? 4 : em === "happy" ? 3 : 2;
-        for (let i = 0; i < ringCount; i++) {
-          const rp = ((t * e.speed * 0.025 + i / ringCount) % 1);
-          const rr = orbR + rp * 80;
-          const ra = (1 - rp) * 0.5;
-          bc.beginPath();
-          bc.arc(cx, cy, rr, 0, Math.PI * 2);
-          bc.strokeStyle = `rgba(${pr},${pg},${pb},${ra})`;
-          bc.lineWidth = 1.5;
-          bc.stroke();
-        }
-      }
-
-      // Ambient floating dots orbit
-      const orbitCount = em === "excited" ? 8 : em === "happy" ? 6 : 4;
-      for (let i = 0; i < orbitCount; i++) {
-        const angle = (t * e.speed * 0.008 + i / orbitCount) * Math.PI * 2;
-        const dist = orbR + 40 + Math.sin(t * 0.03 + i) * 20;
-        const px = cx + Math.cos(angle) * dist;
-        const py = cy + Math.sin(angle) * dist;
-        const dotR = 2 + Math.abs(pulse) * 4;
-        bc.beginPath();
-        bc.arc(px, py, dotR, 0, Math.PI * 2);
-        bc.fillStyle = `rgba(${pr},${pg},${pb},0.5)`;
-        bc.fill();
-      }
-
-      // FX canvas — particles and waves
-      fc.clearRect(0, 0, w, h);
-
-      // Waves
-      wavesRef.current = wavesRef.current.filter(wv => {
-        if (wv.delay > 0) { wv.delay -= 0.016; return true; }
-        wv.radius += 4;
-        wv.life -= wv.decay;
-        if (wv.life <= 0) return false;
-        fc.beginPath();
-        fc.arc(wv.x, wv.y, wv.radius, 0, Math.PI * 2);
-        fc.strokeStyle = `rgba(${wv.r},${wv.g},${wv.b},${wv.life * 0.35})`;
-        fc.lineWidth = 1.5;
-        fc.stroke();
-        return true;
-      });
+      drawCharacter(cx, groundY, t, emo, blink);
 
       // Particles
       particlesRef.current = particlesRef.current.filter(p => {
-        p.life -= p.decay;
-        if (p.life <= 0) return false;
-        p.vy += 0.04;
-        p.vx *= 0.99;
-        p.x += p.vx;
-        p.y += p.vy;
-        fc.beginPath();
-        fc.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-        fc.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.life * 0.9})`;
-        fc.fill();
+        p.life -= p.decay; if (p.life<=0) return false;
+        p.vy += 0.15; p.vx *= 0.99;
+        p.x += p.vx; p.y += p.vy;
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+        return true;
+      });
+
+      // Floating items (stars, hearts)
+      floatingRef.current = floatingRef.current.filter(fi => {
+        fi.life -= fi.decay; if (fi.life<=0) return false;
+        fi.x += fi.vx; fi.y += fi.vy;
+        if (fi.type==="star" && fi.angle!==undefined && fi.spin!==undefined) {
+          fi.angle += fi.spin;
+          drawStar(fi.x,fi.y,fi.size,fi.color,fi.life*0.9);
+        } else if (fi.type==="heart") {
+          drawHeart(fi.x,fi.y,fi.size,fi.color,fi.life*0.8);
+        }
         return true;
       });
 
       // Ambient rising particles
-      if (Math.random() < 0.3 + e.speed * 0.1) {
-        const ax = cx + (Math.random() - 0.5) * (orbR * 2.5);
-        const ay = cy + orbR * 0.8;
+      const shirtC = SHIRT_COLORS[emo];
+      if (Math.random() < 0.25) {
         particlesRef.current.push({
-          x: ax, y: ay,
-          vx: (Math.random() - 0.5) * 0.4,
-          vy: -(Math.random() * e.particleSpeed * 0.3 + 0.2),
-          size: Math.random() * 1.2 + 0.3,
-          life: 1, decay: Math.random() * 0.008 + 0.003,
-          r: pr, g: pg, b: pb,
+          x: cx+(Math.random()-0.5)*(W*0.4), y: groundY+10,
+          vx: (Math.random()-0.5)*0.4, vy: -(Math.random()*0.8+0.3),
+          size: Math.random()*1.5+0.3, life: 1, decay: Math.random()*0.006+0.003,
+          color: shirtC,
         });
       }
 
@@ -328,12 +495,23 @@ export default function VoicePage() {
     };
 
     frameRef.current = requestAnimationFrame(draw);
+
+    // Auto spawn effects
+    const effectInterval = setInterval(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const emo = emotionRef.current;
+      if (["happy","excited","proud","empathetic","sad"].includes(emo)) {
+        spawnEffects(emo, canvas.width/2, canvas.height*0.55);
+      }
+    }, 900);
+
     return () => {
       cancelAnimationFrame(frameRef.current);
-      window.removeEventListener("resize", resize);
+      clearInterval(effectInterval);
+      ro.disconnect();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [spawnEffects]);
 
   const startCall = async () => {
     const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
@@ -348,37 +526,38 @@ export default function VoicePage() {
       vapiRef.current = vapiInstance;
 
       vapiInstance.on("call-start", () => {
-        setIsActive(true);
-        setConnecting(false);
-        setStatus("");
-        setEmotion("idle");
-        emotionRef.current = "idle";
+        setIsActive(true); setConnecting(false); setStatus("");
+        setEmotion("talking"); emotionRef.current = "talking";
       });
-
       vapiInstance.on("call-end", () => {
-        setIsActive(false);
-        setConnecting(false);
-        setStatus("");
-        setEmotion("idle");
-        emotionRef.current = "idle";
+        setIsActive(false); setConnecting(false); setStatus("");
+        setEmotion("idle"); emotionRef.current = "idle";
         vapiRef.current = null;
       });
-
       vapiInstance.on("error", () => {
-        setIsActive(false);
-        setConnecting(false);
+        setIsActive(false); setConnecting(false);
         setStatus("Connection failed. Try again.");
         vapiRef.current = null;
       });
-
-      // Capture transcript and analyze emotion
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vapiInstance.on("message", (msg: any) => {
-        if (msg?.type === "transcript" && msg?.role === "assistant" && msg?.transcriptType === "final") {
+        if (msg?.type==="transcript" && msg?.role==="assistant" && msg?.transcriptType==="final") {
           const text = msg.transcript;
           setTranscript(text);
           if (analyzeTimeoutRef.current) clearTimeout(analyzeTimeoutRef.current);
-          analyzeTimeoutRef.current = setTimeout(() => analyzeEmotion(text), 300);
+          analyzeTimeoutRef.current = setTimeout(() => analyzeEmotion(text), 400);
+        }
+        if (msg?.type==="speech-start" && msg?.role==="assistant") {
+          if (emotionRef.current === "idle" || emotionRef.current === "thinking") {
+            setEmotion("talking"); emotionRef.current = "talking";
+          }
+        }
+        if (msg?.type==="speech-end" && msg?.role==="assistant") {
+          setTimeout(() => {
+            if (emotionRef.current === "talking") {
+              setEmotion("thinking"); emotionRef.current = "thinking";
+            }
+          }, 500);
         }
       });
 
@@ -391,11 +570,8 @@ export default function VoicePage() {
 
   const endCall = () => {
     if (vapiRef.current) { try { vapiRef.current.stop(); } catch { /* ignore */ } vapiRef.current = null; }
-    setIsActive(false);
-    setConnecting(false);
-    setStatus("");
-    setEmotion("idle");
-    emotionRef.current = "idle";
+    setIsActive(false); setConnecting(false); setStatus("");
+    setEmotion("idle"); emotionRef.current = "idle";
   };
 
   const toggleMute = () => {
@@ -403,25 +579,19 @@ export default function VoicePage() {
   };
 
   const formatDuration = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
-
   const companionType = profile?.companion_type || "dad";
   const companionName = profile?.companion_name || "DAD";
-  const e = EMOTIONS[emotion];
-  const [pr,pg,pb] = e.primary;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000", overflow: "hidden", fontFamily: "sans-serif" }}>
-      {/* Background canvas */}
-      <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
-      {/* FX canvas */}
-      <canvas ref={fxCanvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+    <div style={{ position:"fixed", inset:0, background:"#000", overflow:"hidden", fontFamily:"sans-serif", display:"flex", flexDirection:"column" }}>
+      {/* Canvas fills everything */}
+      <canvas ref={canvasRef} style={{ position:"absolute", inset:0, width:"100%", height:"100%" }} />
 
-      {/* Back button */}
+      {/* Back */}
       <Link href="/dashboard" style={{
-        position: "absolute", top: 24, left: 24, zIndex: 20,
-        color: "rgba(255,255,255,0.3)", display: "flex", alignItems: "center",
-        gap: 6, fontSize: 11, textDecoration: "none", letterSpacing: "0.3em",
-        textTransform: "uppercase",
+        position:"absolute", top:20, left:20, zIndex:20,
+        color:"rgba(255,255,255,0.3)", display:"flex", alignItems:"center",
+        gap:6, fontSize:11, textDecoration:"none", letterSpacing:"0.3em", textTransform:"uppercase",
       }}>
         <ArrowLeft size={13} /> Back
       </Link>
@@ -429,147 +599,99 @@ export default function VoicePage() {
       {/* Duration */}
       {isActive && (
         <div style={{
-          position: "absolute", top: 28, right: 24, zIndex: 20,
-          color: `rgba(${pr},${pg},${pb},0.7)`,
-          fontSize: 12, fontFamily: "monospace", letterSpacing: "0.15em",
-          transition: "color 1s ease",
+          position:"absolute", top:24, right:20, zIndex:20,
+          color:"rgba(255,255,255,0.4)", fontSize:12,
+          fontFamily:"monospace", letterSpacing:"0.15em",
         }}>
           {formatDuration(duration)}
         </div>
       )}
 
-      {/* Emotion label */}
-      {isActive && emotion !== "idle" && (
-        <div style={{
-          position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)",
-          zIndex: 20, color: `rgba(${pr},${pg},${pb},0.6)`,
-          fontSize: 10, letterSpacing: "0.35em", textTransform: "uppercase",
-          transition: "color 1s ease",
-        }}>
-          {e.label}
-        </div>
-      )}
-
-      {/* Main UI — centered */}
+      {/* Companion name — top center */}
       <div style={{
-        position: "absolute", inset: 0, zIndex: 10,
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center", gap: 40,
+        position:"absolute", top:20, left:"50%", transform:"translateX(-50%)",
+        zIndex:20, textAlign:"center",
       }}>
-        {/* Name */}
-        <div style={{ textAlign: "center" }}>
-          <p style={{
-            fontSize: 10, color: "rgba(255,255,255,0.25)",
-            letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6,
-          }}>
-            {COMPANION_LABELS[companionType]}
-          </p>
-          <h1 style={{
-            fontSize: "clamp(28px,5vw,52px)", fontWeight: 200,
-            letterSpacing: "0.2em", margin: 0,
-            color: `rgb(${pr},${pg},${pb})`,
-            textShadow: `0 0 40px rgba(${pr},${pg},${pb},0.5)`,
-            transition: "color 1.5s ease, text-shadow 1.5s ease",
-          }}>
-            {companionName}
-          </h1>
-        </div>
-
-        {/* Invisible orb click area — canvas draws the orb */}
-        <div style={{ width: 220, height: 220 }} />
-
-        {/* Transcript display */}
-        <div style={{
-          textAlign: "center", minHeight: 60, maxWidth: 320, padding: "0 24px",
-        }}>
-          {!isActive && !connecting && (
-            <p style={{
-              fontSize: 11, color: "rgba(255,255,255,0.2)",
-              letterSpacing: "0.25em", textTransform: "uppercase",
-            }}>
-              Tap to connect
-            </p>
-          )}
-          {connecting && (
-            <p style={{
-              fontSize: 12, color: `rgba(${pr},${pg},${pb},0.6)`,
-              letterSpacing: "0.2em", textTransform: "uppercase",
-            }}>
-              Connecting...
-            </p>
-          )}
-          {isActive && transcript && (
-            <p style={{
-              fontSize: 14, color: `rgba(${pr},${pg},${pb},0.8)`,
-              fontStyle: "italic", lineHeight: 1.6,
-              transition: "color 1.5s ease",
-            }}>
-              "{transcript}"
-            </p>
-          )}
-          {status && (
-            <p style={{ fontSize: 12, color: "rgba(255,80,80,0.7)", letterSpacing: "0.1em" }}>
-              {status}
-            </p>
-          )}
-        </div>
-
-        {/* Controls */}
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          {!isActive ? (
-            <button
-              onClick={startCall}
-              disabled={connecting}
-              style={{
-                width: 68, height: 68, borderRadius: "50%", border: "none",
-                background: `linear-gradient(135deg, rgb(${pr},${pg},${pb}), rgb(${Math.round(pr*0.6)},${Math.round(pg*0.6)},${Math.round(pb*0.4)}))`,
-                cursor: connecting ? "not-allowed" : "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: `0 0 40px rgba(${pr},${pg},${pb},0.5)`,
-                opacity: connecting ? 0.5 : 1,
-                transition: "all 0.4s ease",
-              }}
-            >
-              <Phone size={26} color="#000" />
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={toggleMute}
-                style={{
-                  width: 52, height: 52, borderRadius: "50%",
-                  border: `1px solid ${muted ? "rgba(220,60,60,0.5)" : "rgba(255,255,255,0.12)"}`,
-                  background: muted ? "rgba(220,60,60,0.15)" : "rgba(255,255,255,0.05)",
-                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all 0.3s ease",
-                }}
-              >
-                {muted ? <MicOff size={20} color="rgba(220,100,100,0.9)" /> : <Mic size={20} color="rgba(255,255,255,0.6)" />}
-              </button>
-              <button
-                onClick={endCall}
-                style={{
-                  width: 68, height: 68, borderRadius: "50%",
-                  border: "1px solid rgba(220,60,60,0.4)",
-                  background: "rgba(220,60,60,0.2)",
-                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: "0 0 20px rgba(220,60,60,0.2)",
-                  transition: "all 0.3s ease",
-                }}
-              >
-                <PhoneOff size={26} color="rgba(220,100,100,0.9)" />
-              </button>
-            </>
-          )}
-        </div>
-
-        <p style={{
-          fontSize: 9, color: "rgba(255,255,255,0.08)",
-          letterSpacing: "0.3em", textTransform: "uppercase",
-        }}>
-          DAD · Dreams. Actions. Destiny.
+        <p style={{ fontSize:9, color:"rgba(255,255,255,0.2)", letterSpacing:"0.4em", textTransform:"uppercase", margin:0 }}>
+          {COMPANION_LABELS[companionType]}
+        </p>
+        <p style={{ fontSize:18, fontWeight:200, color:"rgba(255,255,255,0.7)", letterSpacing:"0.2em", margin:0 }}>
+          {companionName}
         </p>
       </div>
+
+      {/* Emotion label — just above bottom UI */}
+      <div style={{
+        position:"absolute", bottom:160, left:"50%", transform:"translateX(-50%)",
+        zIndex:20, textAlign:"center",
+      }}>
+        <p style={{
+          fontSize:11, color:"rgba(255,255,255,0.25)",
+          letterSpacing:"0.3em", textTransform:"uppercase", margin:0,
+          transition:"all 0.8s ease",
+        }}>
+          {isActive ? EMOTION_LABELS[emotion] : "Tap to connect"}
+        </p>
+        {isActive && transcript && (
+          <p style={{
+            fontSize:13, color:"rgba(255,255,255,0.5)",
+            fontStyle:"italic", maxWidth:300, margin:"8px auto 0",
+            lineHeight:1.5,
+          }}>
+            "{transcript.slice(0,80)}{transcript.length>80?"...":""}"
+          </p>
+        )}
+        {status && <p style={{ fontSize:11, color:"rgba(255,80,80,0.7)", margin:"8px 0 0" }}>{status}</p>}
+      </div>
+
+      {/* Controls — bottom */}
+      <div style={{
+        position:"absolute", bottom:40, left:"50%", transform:"translateX(-50%)",
+        zIndex:20, display:"flex", gap:16, alignItems:"center",
+      }}>
+        {!isActive ? (
+          <button onClick={startCall} disabled={connecting} style={{
+            width:68, height:68, borderRadius:"50%", border:"none",
+            background:"linear-gradient(135deg,#d4a050,#a07030)",
+            cursor:connecting?"not-allowed":"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            boxShadow:"0 0 40px rgba(212,160,80,0.5)",
+            opacity:connecting?0.5:1, transition:"all 0.3s ease",
+          }}>
+            <Phone size={26} color="#000" />
+          </button>
+        ) : (
+          <>
+            <button onClick={toggleMute} style={{
+              width:52, height:52, borderRadius:"50%",
+              border:`1px solid ${muted?"rgba(220,60,60,0.5)":"rgba(255,255,255,0.12)"}`,
+              background:muted?"rgba(220,60,60,0.15)":"rgba(255,255,255,0.05)",
+              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+              transition:"all 0.3s ease",
+            }}>
+              {muted ? <MicOff size={20} color="rgba(220,100,100,0.9)" /> : <Mic size={20} color="rgba(255,255,255,0.6)" />}
+            </button>
+            <button onClick={endCall} style={{
+              width:68, height:68, borderRadius:"50%",
+              border:"1px solid rgba(220,60,60,0.4)",
+              background:"rgba(220,60,60,0.2)",
+              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow:"0 0 20px rgba(220,60,60,0.2)",
+              transition:"all 0.3s ease",
+            }}>
+              <PhoneOff size={26} color="rgba(220,100,100,0.9)" />
+            </button>
+          </>
+        )}
+      </div>
+
+      <p style={{
+        position:"absolute", bottom:14, left:"50%", transform:"translateX(-50%)",
+        fontSize:9, color:"rgba(255,255,255,0.08)",
+        letterSpacing:"0.3em", textTransform:"uppercase", zIndex:20, whiteSpace:"nowrap",
+      }}>
+        DAD · Dreams. Actions. Destiny.
+      </p>
     </div>
   );
 }
