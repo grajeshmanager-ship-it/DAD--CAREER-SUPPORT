@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
         Array.from({ length: pdf.numPages }, async (_, i) => {
           const page = await pdf.getPage(i + 1);
           const content = await page.getTextContent();
-          return content.items.map((item: { str?: string }) => item.str || "").join(" ");
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any return content.items.map((item: any) => item.str || "").join(" ");
         })
       );
       resumeText = pages.join("\n");
