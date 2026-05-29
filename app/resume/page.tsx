@@ -79,7 +79,7 @@ export default function ResumePage() {
     }
   };
 
-  if (loading) return <DadLoading message="DAD is reading your resume..." />;
+  if (loading) return <DadLoading />;
 
   const getScoreColor = (score: number) =>
     score >= 75 ? "text-green-400" : score >= 50 ? "text-yellow-400" : "text-red-400";
