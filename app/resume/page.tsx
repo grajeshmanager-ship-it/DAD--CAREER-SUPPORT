@@ -1,14 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import {
-  Upload, FileText, CheckCircle, ArrowRight,
-  TrendingUp, Target, BookOpen, Briefcase, ArrowLeft, AlertCircle
-} from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import DadLoading from "@/components/ui/dad-loading";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -16,46 +9,18 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface SkillGap {
-  skill: string;
-  rating: string;
-  explanation: string;
-}
-
-interface JobMatch {
-  title: string;
-  demandLevel: string;
-  averageSalary: string;
-}
-
-interface Course {
-  name: string;
-  provider: string;
-  url: string;
-  skillAddressed: string;
-}
-
-interface AtsScore {
-  score: number;
-  missingKeywords: string[];
-  formattingIssues: string[];
-  improvements: { title: string; description: string }[];
-}
-
-interface SalaryRange {
-  min: number;
-  max: number;
-  currency: string;
-  explanation: string;
-}
-
 interface AnalysisResult {
+  atsScore: number;
+  salaryRange: { min: number; max: number; currency: string };
+  currentLevel: string;
+  topSkills: string[];
+  missingKeywords: string[];
+  skillGaps: string[];
+  improvements: { title: string; description: string }[];
+  formattingIssues: string[];
+  jobMatches: { title: string; match: number; reason: string }[];
+  courses: { name: string; provider: string; reason: string }[];
   summary: string;
-  skillGaps: SkillGap[];
-  salaryRange: SalaryRange;
-  jobMatches: JobMatch[];
-  courses: Course[];
-  atsScore: AtsScore;
 }
 
 export default function ResumePage() {
@@ -64,11 +29,51 @@ export default function ResumePage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const hasSpoken = useRef(false);
+
+  const sans = "'Helvetica Neue', Arial, sans-serif";
+  const serif = "'Georgia', 'Times New Roman', serif";
+  const gold = "#C9A84C";
+  const bg = "#070606";
+  const text = "#EBE5DC";
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setAuthToken(data.session?.access_token ?? null);
     });
+  }, []);
+
+  // Voice on load — once per session
+  useEffect(() => {
+    if (hasSpoken.current || sessionStorage.getItem("dad_resume_voiced")) return;
+    hasSpoken.current = true;
+    sessionStorage.setItem("dad_resume_voiced", "1");
+
+    const speak = () => {
+      if (!window.speechSynthesis) return;
+      const utter = new SpeechSynthesisUtterance(
+        "Your CV is not a document. It is the first thing they learn about you. Let's make sure it tells the right story."
+      );
+      utter.rate = 0.80;
+      utter.pitch = 0.87;
+      utter.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find(v => v.name.includes("Daniel")) ||
+        voices.find(v => v.name.includes("Arthur")) ||
+        voices.find(v => v.lang === "en-GB") ||
+        voices.find(v => v.lang.startsWith("en")) ||
+        voices[0];
+      if (preferred) utter.voice = preferred;
+      window.speechSynthesis.speak(utter);
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      setTimeout(speak, 800);
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 800);
+    }
   }, []);
 
   const handleFileChange = (selectedFile: File) => {
@@ -90,9 +95,7 @@ export default function ResumePage() {
       formData.append("resume", file);
       const res = await fetch("/api/analyze-resume", {
         method: "POST",
-        headers: {
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-        },
+        headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
         body: formData,
       });
       const data = await res.json();
@@ -105,26 +108,6 @@ export default function ResumePage() {
     }
   };
 
-  if (loading) return <DadLoading />;
-
-  const getScoreColor = (score: number) =>
-    score >= 75 ? "text-green-400" : score >= 50 ? "text-yellow-400" : "text-red-400";
-
-  const getScoreBg = (score: number) =>
-    score >= 75 ? "bg-green-400" : score >= 50 ? "bg-yellow-400" : "bg-red-400";
-
-  const getRatingColor = (rating: string) => {
-    if (rating === "High") return "text-red-400 bg-red-500/10 border-red-500/20";
-    if (rating === "Mid") return "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
-    return "text-green-400 bg-green-500/10 border-green-500/20";
-  };
-
-  const getDemandColor = (demand: string) => {
-    if (demand === "High") return "text-green-400";
-    if (demand === "Medium") return "text-yellow-400";
-    return "text-red-400";
-  };
-
   const getCurrencySymbol = (currency: string) => {
     if (currency === "GBP") return "£";
     if (currency === "USD") return "$";
@@ -132,286 +115,215 @@ export default function ResumePage() {
     return currency + " ";
   };
 
-  const openUrl = (url: string) => {
-    if (typeof window !== "undefined") {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  };
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px" }}>
+        <div style={{ fontSize: "clamp(60px, 10vw, 120px)", fontWeight: "700", color: "rgba(201,168,76,0.08)", letterSpacing: "-0.04em", fontFamily: serif, userSelect: "none" }}>DAD</div>
+        <div style={{ fontSize: "11px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.5)", fontFamily: sans }}>
+          Reading your story...
+        </div>
+        <div style={{ width: "120px", height: "0.5px", background: "rgba(201,168,76,0.15)", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: "40%", background: gold, animation: "slide 1.4s ease-in-out infinite" }} />
+        </div>
+        <style>{`@keyframes slide { 0%{left:-40%} 100%{left:140%} }`}</style>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container px-4 md:px-6 max-w-4xl mx-auto flex items-center justify-between h-16">
-          <Link href="/dashboard" className="text-2xl font-bold text-primary">DAD</Link>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <FileText className="w-4 h-4" />
-            <span>Resume Review</span>
-          </div>
-        </div>
+    <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif }}>
+
+      {/* Nav */}
+      <nav style={{ padding: "18px 52px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "0.5px solid rgba(201,168,76,0.08)", position: "sticky", top: 0, zIndex: 100, background: "rgba(7,6,6,0.97)" }}>
+        <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
+        <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(235,229,220,0.25)", fontFamily: sans }}>CV Intelligence</div>
+        <Link href="/dashboard" style={{ fontSize: "11px", color: "rgba(235,229,220,0.25)", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>← Dashboard</Link>
       </nav>
 
-      <main className="container px-4 md:px-6 max-w-4xl mx-auto py-10">
-        {!result ? (
-          <div className="space-y-8">
-            <div className="text-center">
-              <h1 className="text-3xl md:text-4xl font-bold mb-3">Resume Review</h1>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Upload your CV and DAD will tell you exactly what recruiters see — ATS score, skill gaps, salary range, and what to fix.
-              </p>
-            </div>
+      {!result ? (
+        <div style={{ maxWidth: "800px", margin: "0 auto", padding: "80px 52px" }}>
 
-            <Card className="p-8 border border-border bg-card/50">
-              <div
-                className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-200 ${
-                  file
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-border hover:border-primary/40 hover:bg-primary/5"
-                }`}
-                onClick={() => document.getElementById("resume-file")?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const dropped = e.dataTransfer.files[0];
-                  if (dropped) handleFileChange(dropped);
-                }}
-              >
-                <input
-                  id="resume-file"
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const selected = e.target.files?.[0];
-                    if (selected) handleFileChange(selected);
-                  }}
-                />
-                {file ? (
-                  <div className="space-y-3">
-                    <CheckCircle className="w-12 h-12 text-primary mx-auto" />
-                    <p className="font-semibold text-lg">{file.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(file.size / 1024).toFixed(0)} KB · Click to change
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
-                    <p className="font-semibold text-lg">Drop your resume here</p>
-                    <p className="text-sm text-muted-foreground">PDF only · Click to browse</p>
-                  </div>
-                )}
+          {/* Header */}
+          <div style={{ marginBottom: "64px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.26em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "18px", fontFamily: sans }}>CV Intelligence</div>
+            <h1 style={{ fontSize: "clamp(32px, 5vw, 60px)", fontWeight: "300", color: text, lineHeight: "1.1", marginBottom: "20px", letterSpacing: "-0.02em" }}>
+              What does your CV<br />actually say about you?
+            </h1>
+            <p style={{ fontSize: "15px", color: "rgba(235,229,220,0.4)", lineHeight: "1.9", fontFamily: sans, fontWeight: "300", maxWidth: "480px", margin: 0 }}>
+              Upload it. Your companion will read every line — the skills, the gaps,
+              the salary you should be asking for, and exactly what needs to change.
+              This is not an ATS checker. This is a learning event.
+            </p>
+          </div>
+
+          {/* Upload area */}
+          <div
+            onClick={() => document.getElementById("resume-file")?.click()}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileChange(f); }}
+            style={{
+              border: `0.5px solid ${dragOver ? gold : file ? "rgba(201,168,76,0.4)" : "rgba(201,168,76,0.15)"}`,
+              padding: "80px 52px", textAlign: "center", cursor: "pointer",
+              background: dragOver ? "rgba(201,168,76,0.04)" : file ? "rgba(201,168,76,0.02)" : "transparent",
+              transition: "all 0.3s ease", marginBottom: "32px",
+            }}
+          >
+            <input id="resume-file" type="file" accept=".pdf" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFileChange(f); }} />
+
+            {file ? (
+              <div>
+                <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: gold, marginBottom: "12px", fontFamily: sans }}>Ready</div>
+                <div style={{ fontSize: "20px", fontWeight: "300", color: text, marginBottom: "8px" }}>{file.name}</div>
+                <div style={{ fontSize: "12px", color: "rgba(235,229,220,0.3)", fontFamily: sans }}>{(file.size / 1024).toFixed(0)} KB · Click to change</div>
               </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", marginBottom: "16px", fontFamily: sans }}>Upload your CV</div>
+                <div style={{ fontSize: "22px", fontWeight: "300", color: "rgba(235,229,220,0.4)", marginBottom: "10px" }}>Drop your PDF here</div>
+                <div style={{ fontSize: "12px", color: "rgba(235,229,220,0.2)", fontFamily: sans }}>or click to browse · PDF only · Max 5MB</div>
+              </div>
+            )}
+          </div>
 
-              {error && (
-                <div className="flex items-center gap-2 mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
-                  <p className="text-sm text-destructive">{error}</p>
-                </div>
+          {error && (
+            <div style={{ padding: "16px 24px", border: "0.5px solid rgba(176,112,112,0.3)", marginBottom: "24px" }}>
+              <p style={{ fontSize: "13px", color: "#B07070", fontFamily: sans, margin: 0, lineHeight: "1.6" }}>{error}</p>
+            </div>
+          )}
+
+          <button onClick={handleUpload} disabled={!file} style={{
+            width: "100%", background: file ? gold : "rgba(201,168,76,0.15)",
+            color: file ? bg : "rgba(235,229,220,0.2)", border: "none",
+            padding: "20px", cursor: file ? "pointer" : "not-allowed",
+            fontSize: "11px", letterSpacing: "0.18em", textTransform: "uppercase",
+            fontFamily: sans, transition: "all 0.3s",
+          }}>
+            {file ? "Let them read it →" : "Select a file to continue"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ maxWidth: "900px", margin: "0 auto", padding: "60px 52px" }}>
+
+          <button onClick={() => { setResult(null); setFile(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: "rgba(235,229,220,0.3)", fontFamily: sans, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "48px", display: "flex", alignItems: "center", gap: "8px", padding: 0 }}>
+            ← Upload another
+          </button>
+
+          {/* Summary */}
+          <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "48px", marginBottom: "48px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "16px", fontFamily: sans }}>What your companion learned</div>
+            <p style={{ fontSize: "17px", color: "rgba(235,229,220,0.6)", lineHeight: "1.9", fontFamily: sans, fontWeight: "300", maxWidth: "680px", margin: 0 }}>
+              {result.summary}
+            </p>
+          </div>
+
+          {/* Score + Salary */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.07)", marginBottom: "48px" }}>
+            <div style={{ background: bg, padding: "40px 44px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "16px", fontFamily: sans }}>ATS Score</div>
+              <div style={{ fontSize: "clamp(52px, 7vw, 80px)", fontWeight: "200", color: result.atsScore >= 70 ? "#5B9E7A" : result.atsScore >= 50 ? gold : "#B07070", lineHeight: "1", marginBottom: "16px" }}>
+                {result.atsScore}<span style={{ fontSize: "20px", opacity: 0.4 }}>/100</span>
+              </div>
+              <div style={{ width: "100%", height: "2px", background: "rgba(235,229,220,0.05)" }}>
+                <div style={{ height: "100%", width: `${result.atsScore}%`, background: result.atsScore >= 70 ? "#5B9E7A" : result.atsScore >= 50 ? gold : "#B07070", transition: "width 1s ease" }} />
+              </div>
+            </div>
+            <div style={{ background: bg, padding: "40px 44px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "16px", fontFamily: sans }}>Estimated salary</div>
+              <div style={{ fontSize: "clamp(32px, 4vw, 52px)", fontWeight: "200", color: gold, lineHeight: "1", marginBottom: "8px" }}>
+                {getCurrencySymbol(result.salaryRange?.currency || "GBP")}{Number(result.salaryRange?.min || 0).toLocaleString()}
+              </div>
+              <div style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", fontFamily: sans, fontWeight: "300" }}>
+                up to {getCurrencySymbol(result.salaryRange?.currency || "GBP")}{Number(result.salaryRange?.max || 0).toLocaleString()} / year
+              </div>
+              {result.currentLevel && (
+                <div style={{ fontSize: "12px", color: "rgba(235,229,220,0.25)", fontFamily: sans, marginTop: "12px" }}>{result.currentLevel}</div>
               )}
-
-              <Button
-                onClick={handleUpload}
-                className="w-full mt-6 rounded-full"
-                size="lg"
-                disabled={!file}
-              >
-                Analyse My Resume
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </Card>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setResult(null); setFile(null); }}
-              className="rounded-full gap-2 mb-4"
-            >
-              <ArrowLeft className="w-4 h-4" /> Upload another
-            </Button>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card className="p-6 border border-border bg-card/50">
-                <p className="text-sm text-muted-foreground mb-2">ATS Score</p>
-                <div className="flex items-end gap-2 mb-3">
-                  <span className={`text-5xl font-bold ${getScoreColor(Number(result.atsScore?.score ?? 0))}`}>
-                    {Number(result.atsScore?.score ?? 0)}
-                  </span>
-                  <span className="text-muted-foreground mb-1">/100</span>
-                </div>
-                <div className="w-full bg-border rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-1000 ${getScoreBg(Number(result.atsScore?.score ?? 0))}`}
-                    style={{ width: `${Number(result.atsScore?.score ?? 0)}%` }}
-                  />
-                </div>
-              </Card>
-
-              <Card className="p-6 border border-border bg-card/50">
-                <p className="text-sm text-muted-foreground mb-2">Estimated Salary Range</p>
-                <p className="text-3xl font-bold text-primary">
-                  {getCurrencySymbol(result.salaryRange?.currency || "GBP")}
-                  {Number(result.salaryRange?.min ?? 0).toLocaleString()}
-                </p>
-                <p className="text-muted-foreground text-sm mt-1">
-                  up to {getCurrencySymbol(result.salaryRange?.currency || "GBP")}
-                  {Number(result.salaryRange?.max ?? 0).toLocaleString()} / year
-                </p>
-                {result.salaryRange?.explanation && (
-                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                    {result.salaryRange.explanation}
-                  </p>
-                )}
-              </Card>
-            </div>
-
-            {result.summary && (
-              <Card className="p-6 border border-primary/20 bg-primary/5">
-                <p className="text-sm leading-relaxed">{result.summary}</p>
-              </Card>
-            )}
-
-            {result.atsScore?.improvements?.length > 0 && (
-              <Card className="p-5 border border-border bg-card/50">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <Target className="w-4 h-4 text-primary" /> What to fix in your CV
-                </h3>
-                <div className="space-y-3">
-                  {result.atsScore.improvements.map((imp, i) => (
-                    <div key={i} className="p-3 bg-red-500/5 border border-red-500/15 rounded-lg">
-                      <p className="text-sm font-medium text-red-400 mb-1">{imp.title}</p>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{imp.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {result.atsScore?.missingKeywords?.length > 0 && (
-              <Card className="p-5 border border-border bg-card/50">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-yellow-400" /> Missing keywords
-                </h3>
-                <p className="text-xs text-muted-foreground mb-3">Add these to your CV to pass ATS filters:</p>
-                <div className="flex flex-wrap gap-2">
-                  {result.atsScore.missingKeywords.map((kw, i) => (
-                    <span key={i} className="text-xs bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-full px-3 py-1">
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {result.skillGaps?.length > 0 && (
-              <Card className="p-5 border border-border bg-card/50">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-primary" /> Skill gaps to close
-                </h3>
-                <div className="space-y-3">
-                  {result.skillGaps.map((gap, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 bg-secondary/50 rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="text-sm font-medium">{gap.skill}</p>
-                          <span className={`text-xs border rounded-full px-2 py-0.5 ${getRatingColor(gap.rating)}`}>
-                            {gap.rating} priority
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{gap.explanation}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {result.jobMatches?.length > 0 && (
-              <Card className="p-5 border border-border bg-card/50">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <Briefcase className="w-4 h-4 text-primary" /> Best job matches
-                </h3>
-                <div className="space-y-3">
-                  {result.jobMatches.map((job, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium">{job.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Avg salary: {job.averageSalary}
-                        </p>
-                      </div>
-                      <span className={`text-xs font-medium ${getDemandColor(job.demandLevel)}`}>
-                        {job.demandLevel} demand
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {result.courses?.length > 0 && (
-              <Card className="p-5 border border-border bg-card/50">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-primary" /> Recommended courses
-                </h3>
-                <div className="space-y-3">
-                  {result.courses.map((c, i) => (
-                    <div key={i} className="p-3 bg-secondary/50 rounded-lg">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium">{c.name}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {c.provider} · Builds: {c.skillAddressed}
-                          </p>
-                        </div>
-                        {c.url && c.url !== "#" && (
-                          <button
-                            onClick={() => openUrl(c.url)}
-                            className="text-xs text-primary hover:underline flex-shrink-0"
-                          >
-                            View →
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {result.atsScore?.formattingIssues?.length > 0 && (
-              <Card className="p-5 border border-border bg-card/50">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-orange-400" /> Formatting issues
-                </h3>
-                <ul className="space-y-2">
-                  {result.atsScore.formattingIssues.map((issue, i) => (
-                    <li key={i} className="text-sm flex gap-2 text-muted-foreground">
-                      <span className="text-orange-400 mt-0.5">•</span>{issue}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            )}
-
-            <div className="flex gap-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => { setResult(null); setFile(null); }}
-                className="flex-1 rounded-full"
-              >
-                Analyse Another Resume
-              </Button>
-              <Link href="/interview" className="flex-1">
-                <Button className="w-full rounded-full">
-                  Practice Interview Next <ArrowRight className="ml-2 w-4 h-4" />
-                </Button>
-                </Link>
             </div>
           </div>
-        )}
-      </main>
+
+          {/* What to fix */}
+          {result.improvements?.length > 0 && (
+            <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "24px", fontFamily: sans }}>What needs to change</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "rgba(176,112,112,0.06)" }}>
+                {result.improvements.map((imp, i) => (
+                  <div key={i} style={{ background: bg, padding: "20px 28px" }}>
+                    <div style={{ fontSize: "13px", color: "#B07070", marginBottom: "6px", fontFamily: sans }}>{imp.title}</div>
+                    <div style={{ fontSize: "12px", color: "rgba(235,229,220,0.35)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7" }}>{imp.description}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Missing keywords */}
+          {result.missingKeywords?.length > 0 && (
+            <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "20px", fontFamily: sans }}>Missing keywords</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {result.missingKeywords.map((kw, i) => (
+                  <span key={i} style={{ fontSize: "11px", color: "rgba(235,229,220,0.45)", border: "0.5px solid rgba(201,168,76,0.2)", padding: "5px 14px", fontFamily: sans }}>{kw}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top skills */}
+          {result.topSkills?.length > 0 && (
+            <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "20px", fontFamily: sans }}>Your strongest skills</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {result.topSkills.map((skill, i) => (
+                  <span key={i} style={{ fontSize: "11px", color: gold, border: `0.5px solid ${gold}40`, padding: "5px 14px", fontFamily: sans }}>{skill}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Job matches */}
+          {result.jobMatches?.length > 0 && (
+            <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "24px", fontFamily: sans }}>Best role matches</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
+                {result.jobMatches.map((job, i) => (
+                  <div key={i} style={{ background: bg, padding: "18px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: "14px", color: text, fontWeight: "300", marginBottom: "4px" }}>{job.title}</div>
+                      <div style={{ fontSize: "11px", color: "rgba(235,229,220,0.3)", fontFamily: sans }}>{job.reason}</div>
+                    </div>
+                    <div style={{ fontSize: "13px", color: job.match >= 70 ? "#5B9E7A" : gold, fontFamily: sans, flexShrink: 0, marginLeft: "20px" }}>{job.match}%</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Courses */}
+          {result.courses?.length > 0 && (
+            <div style={{ marginBottom: "40px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "24px", fontFamily: sans }}>Recommended next steps</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
+                {result.courses.map((c, i) => (
+                  <div key={i} style={{ background: bg, padding: "18px 28px" }}>
+                    <div style={{ fontSize: "14px", color: text, fontWeight: "300", marginBottom: "4px" }}>{c.name}</div>
+                    <div style={{ fontSize: "11px", color: "rgba(235,229,220,0.3)", fontFamily: sans }}>{c.provider} · {c.reason}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "16px", paddingTop: "24px", borderTop: "0.5px solid rgba(201,168,76,0.08)" }}>
+            <button onClick={() => { setResult(null); setFile(null); }} style={{ border: "0.5px solid rgba(235,229,220,0.12)", background: "none", color: "rgba(235,229,220,0.4)", padding: "16px 32px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
+              Upload another
+            </button>
+            <Link href="/interview" style={{ display: "inline-flex", alignItems: "center", gap: "12px", background: gold, color: bg, padding: "16px 36px", textDecoration: "none", fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
+              Practice interview →
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
