@@ -10,62 +10,13 @@ const supabase = createClient(
 );
 
 const COMPANIONS = [
-  {
-    type: "dad",
-    label: "Father",
-    sub: "Dad",
-    color: "#C9A84C",
-    description: "He has watched you struggle and never once stopped believing. Direct. Proud. The kind of presence that makes you want to be better just by being in the room.",
-    greeting: (name: string, you: string) => `${you}. I've been waiting for you. Let's get to work.`,
-  },
-  {
-    type: "mom",
-    label: "Mother",
-    sub: "Mum",
-    color: "#A07898",
-    description: "She will hold you together when you cannot hold yourself. Warm beyond measure. Wise beyond words. The one who sees who you really are.",
-    greeting: (name: string, you: string) => `${you}, sweetheart. I'm here. We're going to figure this out together.`,
-  },
-  {
-    type: "mentor",
-    label: "Mentor",
-    sub: "Mentor",
-    color: "#6B8CFF",
-    description: "Strategic. Calm. He has been where you are going and knows exactly which turns to take. He sees the version of you that you have not met yet.",
-    greeting: (name: string, you: string) => `Good. You showed up. That's always the hardest part. Now let's talk about where you're going.`,
-  },
-  {
-    type: "brother",
-    label: "Brother",
-    sub: "Brother",
-    color: "#5B8C6B",
-    description: "Honest. Competitive. He will not let you settle for less than you deserve — and he will give you grief if you try. The push you actually need.",
-    greeting: (name: string, you: string) => `Finally. I was wondering when you'd get serious. Let's go.`,
-  },
-  {
-    type: "sister",
-    label: "Sister",
-    sub: "Sister",
-    color: "#B07070",
-    description: "Sharp. Empathetic. She reads every room before you walk into it. Always in your corner. Never lets you walk in underprepared.",
-    greeting: (name: string, you: string) => `Okay, I'm here. Tell me everything. What are we working with?`,
-  },
-  {
-    type: "friend",
-    label: "Friend",
-    sub: "Friend",
-    color: "#5B9898",
-    description: "Real talk. No filter. No performance. The one who tells you the truth when everyone else is being polite. Rides with you through all of it.",
-    greeting: (name: string, you: string) => `Right, so — what's actually going on? Talk to me.`,
-  },
-  {
-    type: "partner",
-    label: "Partner",
-    sub: "Partner",
-    color: "#8870A8",
-    description: "Patient. Devoted. They believe in your dream as much as you do — sometimes more. The one who never lets you give up on yourself.",
-    greeting: (name: string, you: string) => `I'm so glad you're doing this. I've always known you could. Let's build this together.`,
-  },
+  { type: "dad", label: "Father", sub: "Dad", color: "#C9A84C", description: "He has watched you struggle and never once stopped believing. Direct. Proud. The kind of presence that makes you want to be better just by being in the room.", greeting: "I've been waiting for you. Let's get to work." },
+  { type: "mom", label: "Mother", sub: "Mum", color: "#A07898", description: "She will hold you together when you cannot hold yourself. Warm beyond measure. Wise beyond words. The one who sees who you really are.", greeting: "Sweetheart. I'm here. We're going to figure this out together." },
+  { type: "mentor", label: "Mentor", sub: "Mentor", color: "#6B8CFF", description: "Strategic. Calm. He has been where you are going and knows exactly which turns to take. He sees the version of you that you have not met yet.", greeting: "Good. You showed up. That's always the hardest part. Now let's talk about where you're going." },
+  { type: "brother", label: "Brother", sub: "Brother", color: "#5B8C6B", description: "Honest. Competitive. He will not let you settle for less than you deserve — and he will give you grief if you try. The push you actually need.", greeting: "Finally. I was wondering when you'd get serious. Let's go." },
+  { type: "sister", label: "Sister", sub: "Sister", color: "#B07070", description: "Sharp. Empathetic. She reads every room before you walk into it. Always in your corner. Never lets you walk in underprepared.", greeting: "Okay, I'm here. Tell me everything. What are we working with?" },
+  { type: "friend", label: "Friend", sub: "Friend", color: "#5B9898", description: "Real talk. No filter. No performance. The one who tells you the truth when everyone else is being polite. Rides with you through all of it.", greeting: "Right, so — what's actually going on? Talk to me." },
+  { type: "partner", label: "Partner", sub: "Partner", color: "#8870A8", description: "Patient. Devoted. They believe in your dream as much as you do — sometimes more. The one who never lets you give up on yourself.", greeting: "I'm so glad you're doing this. I've always known you could. Let's build this together." },
 ];
 
 type Step = "choose" | "name" | "account" | "meeting";
@@ -91,15 +42,13 @@ export default function SignupPage() {
   const companion = selectedCompanion !== null ? COMPANIONS[selectedCompanion] : null;
   const displayedCompanion = hoveredCompanion !== null ? COMPANIONS[hoveredCompanion] : companion;
 
-  // Voice greeting on meeting screen
   useEffect(() => {
     if (step !== "meeting" || hasSpoken.current || !companion) return;
     hasSpoken.current = true;
 
     const speak = () => {
       if (!window.speechSynthesis) return;
-      const greeting = companion.greeting(companionName, userName || "Hey");
-      const utter = new SpeechSynthesisUtterance(greeting);
+      const utter = new SpeechSynthesisUtterance(companion.greeting);
       utter.rate = 0.84;
       utter.pitch = companion.type === "mom" ? 1.1 : companion.type === "sister" ? 1.05 : 0.88;
       utter.volume = 1;
@@ -115,7 +64,7 @@ export default function SignupPage() {
     } else {
       window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 1200);
     }
-  }, [step]);
+  }, [step, companion]);
 
   const handleSignup = async () => {
     if (!email || !password || !userName) {
@@ -155,7 +104,6 @@ export default function SignupPage() {
     return (
       <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif, display: "flex", flexDirection: "column" }}>
 
-        {/* Nav */}
         <nav style={{ padding: "20px 52px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
           <Link href="/" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
           <Link href="/login" style={{ fontSize: "11px", color: "rgba(235,229,220,0.3)", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>
@@ -165,7 +113,6 @@ export default function SignupPage() {
 
         <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "calc(100vh - 61px)" }}>
 
-          {/* Left — headline */}
           <div style={{
             padding: "60px 52px",
             borderRight: "0.5px solid rgba(201,168,76,0.08)",
@@ -194,10 +141,9 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Selected companion preview */}
-            <div style={{ position: "relative", zIndex: 1, minHeight: "120px" }}>
+            <div style={{ position: "relative", zIndex: 1, minHeight: "140px" }}>
               {displayedCompanion ? (
-                <div style={{ transition: "opacity 0.4s" }}>
+                <div>
                   <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: displayedCompanion.color, marginBottom: "12px", fontFamily: sans, transition: "color 0.4s" }}>
                     {displayedCompanion.label}
                   </div>
@@ -223,7 +169,6 @@ export default function SignupPage() {
             </div>
           </div>
 
-          {/* Right — companion grid */}
           <div style={{ display: "flex", flexDirection: "column" }}>
             {COMPANIONS.map((comp, i) => (
               <div key={i}
@@ -246,8 +191,7 @@ export default function SignupPage() {
                     width: "36px", height: "36px", borderRadius: "50%",
                     border: `0.5px solid ${selectedCompanion === i || hoveredCompanion === i ? comp.color : "rgba(201,168,76,0.15)"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    transition: "border-color 0.3s",
-                    flexShrink: 0,
+                    transition: "border-color 0.3s", flexShrink: 0,
                   }}>
                     {selectedCompanion === i && (
                       <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: comp.color }} />
@@ -284,13 +228,16 @@ export default function SignupPage() {
   // ── STEP: NAME ──
   if (step === "name") {
     return (
-      <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px" }}>
+      <div style={{
+        minHeight: "100vh", background: bg, color: text, fontFamily: serif,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "40px", position: "relative", overflow: "hidden",
+      }}>
         <div style={{
           position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
           fontSize: "clamp(120px, 20vw, 260px)", fontWeight: "700",
           color: `${companion?.color}06`, letterSpacing: "-0.04em",
-          whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none",
-          lineHeight: "1",
+          whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none", lineHeight: "1",
         }}>
           {companion?.sub}
         </div>
@@ -333,8 +280,8 @@ export default function SignupPage() {
               ← Back
             </button>
             <button onClick={() => setStep("account")} style={{
-              background: companion?.color, color: bg,
-              border: "none", padding: "14px 40px", cursor: "pointer",
+              background: companion?.color, color: bg, border: "none",
+              padding: "14px 40px", cursor: "pointer",
               fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans,
             }}>
               {companionName ? `Continue with ${companionName}` : "Continue"} →
@@ -348,7 +295,11 @@ export default function SignupPage() {
   // ── STEP: ACCOUNT ──
   if (step === "account") {
     return (
-      <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px" }}>
+      <div style={{
+        minHeight: "100vh", background: bg, color: text, fontFamily: serif,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "40px",
+      }}>
         <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: "420px", width: "100%" }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: companion?.color, marginBottom: "32px", fontFamily: sans }}>
             Step three · Almost there
@@ -360,7 +311,7 @@ export default function SignupPage() {
             {companionName || companion?.sub} is ready. We just need to know who they are walking beside.
           </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "0", marginBottom: "32px", textAlign: "left" }}>
+          <div style={{ display: "flex", flexDirection: "column", marginBottom: "32px", textAlign: "left" }}>
             {[
               { label: "Your name", value: userName, setter: setUserName, type: "text", placeholder: "What should we call you?" },
               { label: "Email address", value: email, setter: setEmail, type: "email", placeholder: "your@email.com" },
@@ -424,10 +375,8 @@ export default function SignupPage() {
     <div style={{
       minHeight: "100vh", background: "#030202",
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      padding: "40px", textAlign: "center",
-      position: "relative", overflow: "hidden",
+      padding: "40px", textAlign: "center", position: "relative", overflow: "hidden",
     }}>
-      {/* Ambient glow */}
       <div style={{
         position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
         width: "500px", height: "400px",
@@ -435,12 +384,10 @@ export default function SignupPage() {
         pointerEvents: "none",
       }} />
 
-      {/* Ghost name watermark */}
       <div style={{
-        position: "absolute", top: "50%", left: "50%",
-        transform: "translate(-50%,-50%)",
+        position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
         fontSize: "clamp(100px, 18vw, 220px)", fontWeight: "700",
-        color: `${companion?.color}06`, letterSpacing: "-0.04em",
+        color: `${companion?.color}08`, letterSpacing: "-0.04em",
         whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none",
         lineHeight: "1", fontFamily: serif,
       }}>
@@ -462,10 +409,9 @@ export default function SignupPage() {
 
         <p style={{
           fontSize: "clamp(16px, 2vw, 20px)", color: "rgba(235,229,220,0.55)",
-          lineHeight: "1.7", fontStyle: "italic", marginBottom: "52px",
-          fontFamily: serif,
+          lineHeight: "1.7", fontStyle: "italic", marginBottom: "52px", fontFamily: serif,
         }}>
-          "{companion?.greeting(companionName, userName || "Hey")}"
+          "{companion?.greeting}"
         </p>
 
         <div style={{ width: "40px", height: "0.5px", background: companion?.color, margin: "0 auto 40px", opacity: 0.4 }} />
