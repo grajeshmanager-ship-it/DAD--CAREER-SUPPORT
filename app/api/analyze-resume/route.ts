@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
         Array.from({ length: pdf.numPages }, async (_, i) => {
           const page = await pdf.getPage(i + 1);
           const content = await page.getTextContent();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any return content.items.map((item: any) => item.str || "").join(" ");
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return content.items.map((item: any) => item.str || "").join(" ");
         })
       );
       resumeText = pages.join("\n");
@@ -30,12 +31,16 @@ export async function POST(request: NextRequest) {
       resumeText = await file.text();
     }
 
+    if (!resumeText || resumeText.trim().length < 50) {
+      return NextResponse.json({ error: "Could not extract text from your CV. Please try a different file format." }, { status: 400 });
+    }
+
     const prompt = `You are DAD — an expert career advisor and CV specialist. Analyse this resume and return a detailed assessment.
 
 RESUME TEXT:
 ${resumeText}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with no extra text:
 {
   "summary": "2-3 honest sentences about the overall quality and positioning of this CV",
   "skillGaps": [
@@ -61,11 +66,11 @@ Return ONLY valid JSON:
       { "title": "improvement title", "description": "what to do" }
     ]
   },
-  "resumeSummary": "One paragraph summary of this person's background, skills and experience level for DAD to reference",
+  "resumeSummary": "One paragraph summary of this person's background, skills and experience level",
   "topSkills": ["skill1", "skill2", "skill3", "skill4", "skill5"]
 }
 
-Rules: skillGaps 3-5, jobMatches 3-4, courses 3, improvements 3-4, resumeSummary must be detailed enough for an AI to understand this person's full background.`;
+Rules: skillGaps 3-5, jobMatches 3-4, courses 3, improvements 3-4. Base everything on the actual resume content above.`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -124,7 +129,7 @@ Rules: skillGaps 3-5, jobMatches 3-4, courses 3, improvements 3-4, resumeSummary
           last_analysis_at: new Date().toISOString(),
         }).eq("id", user.id);
       }
-    } catch { /* silent — don't fail the request */ }
+    } catch { /* silent */ }
 
     return NextResponse.json({ success: true, analysis: flatAnalysis });
   } catch (error) {
