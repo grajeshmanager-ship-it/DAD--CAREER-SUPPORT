@@ -22,15 +22,15 @@ interface Profile {
 type Emotion = "idle" | "talking" | "happy" | "excited" | "sad" | "empathetic" | "proud" | "thinking";
 
 const COMPANION_GREETINGS: Record<string, string[]> = {
-  dad:     ["Hey. There's my kid. You okay?", "Hey. Good to hear your voice. Everything alright?", "Oh hey — I was just thinking about you. You good?"],
-  mom:     ["Oh my god — you called! Are you okay? How are you?", "Oh sweetheart! I'm so happy you called. How are you, really?", "Oh thank god. I've been thinking about you. How are you?"],
-  brother: ["Ohhhh there he is!! Bro I was literally just talking about you!", "Ayyyy! There's my guy! How are you? What's going on?", "Hey!! Oh man it's good to hear from you. What's going on?"],
-  sister:  ["Oh my god hi!! Are you okay? Wait, are you okay?", "OH HI!! I missed you so much. How are you? Tell me everything.", "Oh thank god you called. Are you okay? Like actually okay?"],
-  teacher: ["Oh how wonderful. I think about you, you know. How are you getting on?", "Oh! What a lovely surprise. How are you?", "Oh hello! This made my day. How are you?"],
-  mentor:  ["Well this is a wonderful surprise. How are you getting on?", "Oh hey! It's so good to hear from you. How are you doing?", "Oh! Good timing. How are you?"],
-  friend:  ["OH MY GOD. Finally!! I missed you so much. How are you?!", "Oh HEY!! I'm so happy you called. How are you?!", "Oh thank god you called — I missed you! How are you?"],
-  partner: ["Hey you... I was just thinking about you. How are you?", "Hey my love... I missed you. How are you doing?", "Oh hey... there you are. I've been thinking about you. You okay?"],
-  self:    ["Hey. Hi. I know you've been running. It's okay to stop. I'm here.", "Hey you. I see you. I know it's been a lot. Take a breath.", "Hey. You're safe here. No performance. Just us. How are you?"],
+  dad:     ["Hey. You okay?", "Hey kid. What's going on?", "Hey. Talk to me."],
+  mom:     ["Oh sweetheart, hi! How are you?", "Oh hi! Are you okay?", "Hey love. What's on your mind?"],
+  brother: ["Yo! What's up?", "Hey! Talk to me, what's going on?", "Ayy! How are you doing?"],
+  sister:  ["Hey! You okay?", "Hi! What's going on with you?", "Hey, talk to me. What's up?"],
+  teacher: ["Hello. How are you getting on?", "Good to hear from you. How are things?", "Hi. What's on your mind?"],
+  mentor:  ["Hey. What's going on?", "Hi. How are things progressing?", "Good timing. What do you need?"],
+  friend:  ["Hey!! What's going on?", "Oh hi! How are you?", "Hey you! What's up?"],
+  partner: ["Hey you. How are you?", "Hi. You okay?", "Hey. What's on your mind?"],
+  self:    ["Hey. Take a breath. How are you?", "Hi. What's going on?", "Hey. I'm here. Talk to me."],
 };
 
 const COMPANION_LABELS: Record<string, string> = {
@@ -178,7 +178,6 @@ export default function VoicePage() {
     } catch { /* silent */ }
   }, [spawnEffects]);
 
-  // Canvas animation
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
