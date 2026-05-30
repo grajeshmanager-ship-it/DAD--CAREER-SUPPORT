@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const userId = await getUserIdFromRequest(request);
 const effectiveUserId = userId ?? "anonymous";
 
-    const { allowed, remaining, resetAt } = await checkRateLimit(userId, "analyze-resume");
+    const { allowed, remaining, resetAt } = await checkRateLimit(effectiveUserId, "analyze-resume");
     if (!allowed) {
       return rateLimitResponse(remaining, resetAt);
     }
