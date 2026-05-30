@@ -1,104 +1,98 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, getUserIdFromRequest, rateLimitResponse } from "@/lib/rateLimit";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const {
-      situation, education, experience, interests,
-      skills, goals, country, situationContext,
-      graduationDate, applied, whyLeaving, breakReason, concerns
-    } = body;
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: "API key not configured" }, { status: 500 });
-
-    const prompt = `You are DAD — a deeply knowledgeable, honest, and caring career advisor. Analyse this person's situation and give them a genuinely personalised career assessment.
-
-SITUATION TYPE: ${situation}
-SPECIAL CONTEXT: ${situationContext}
-
-PERSON'S DETAILS:
-- Education: ${education}
-- Country: ${country}
-- Experience: ${experience || "None"}
-- Graduation date: ${graduationDate || "N/A"}
-- Application history: ${applied || "N/A"}
-- Why leaving: ${whyLeaving || "N/A"}
-- Career break: ${breakReason || "N/A"}
-- Interests: ${interests}
-- Skills: ${skills || "None listed"}
-- Goals: ${goals}
-- Concerns: ${concerns || "Not specified"}
-
-Return ONLY valid JSON:
-{
-  "recommendedPath": "Specific career path name",
-  "reasoning": "2-3 honest sentences explaining why",
-  "topRoles": [
-    { "title": "Job title", "description": "Day-to-day reality", "salaryRange": "£28k-£40k" }
-  ],
-  "skillsToLearn": ["skill1", "skill2", "skill3", "skill4", "skill5"],
-  "actionPlan": [
-    { "step": "Short title", "timeframe": "This week", "description": "Specific action" }
-  ],
-  "courses": [
-    { "name": "Course name", "provider": "Provider", "reason": "Why this course" }
-  ],
-  "encouragement": "One warm honest sentence from DAD",
-  "careerSummary": "One paragraph summary of this person's career situation, goals and recommended path — detailed enough for an AI to reference in conversation"
-}
-
-Rules: topRoles 3, skillsToLearn 5-6, actionPlan 5, courses 3-4.`;
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 3000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) return NextResponse.json({ error: "Claude API error" }, { status: 500 });
-
-    const claudeData = await response.json();
-    const text = claudeData.content?.[0]?.text || "";
-
-    let result;
-    try {
-      const match = text.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error("No JSON found");
-      result = JSON.parse(match[0]);
-    } catch {
-      return NextResponse.json({ error: "Failed to parse result" }, { status: 500 });
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorised", message: "Please log in to get your career assessment." },
+        { status: 401 }
+      );
     }
 
-    // Save to Supabase profile
-    try {
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("profiles").update({
-          career_path: result.recommendedPath,
-          career_roles: result.topRoles?.map((r: { title: string }) => r.title) || [],
-          last_analysis_at: new Date().toISOString(),
-        }).eq("id", user.id);
-      }
-    } catch { /* silent */ }
+    const { allowed, remaining, resetAt } = await checkRateLimit(userId, "career-assessment");
+    if (!allowed) {
+      return rateLimitResponse(remaining, resetAt);
+    }
 
-    return NextResponse.json({ success: true, result });
+    const body = await request.json();
+    const { situation, answers } = body;
+
+    if (!situation || !answers) {
+      return NextResponse.json(
+        { error: "Missing data", message: "Please complete all assessment questions." },
+        { status: 400 }
+      );
+    }
+
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      messages: [
+        {
+          role: "user",
+          content: `You are an expert career strategist. Based on this person's situation and answers, create a personalised career roadmap.
+
+Return a JSON object with exactly these fields:
+
+{
+  "careerPath": string,
+  "headline": string,
+  "topRoles": [{ "title": string, "salaryMin": number, "salaryMax": number, "currency": "GBP", "fit": number, "why": string }],
+  "skillsToLearn": [{ "skill": string, "priority": "high"|"medium"|"low", "timeMonths": number }],
+  "actionPlan": [{ "week": string, "action": string, "outcome": string }],
+  "courses": [{ "name": string, "provider": string, "durationWeeks": number, "free": boolean }],
+  "encouragement": string,
+  "summary": string
+}
+
+Return ONLY valid JSON. No explanation, no markdown, no backticks.
+
+SITUATION: ${situation}
+
+ANSWERS:
+${JSON.stringify(answers, null, 2)}`,
+        },
+      ],
+    });
+
+    const responseText = message.content[0].type === "text" ? message.content[0].text : "";
+
+    let roadmap;
+    try {
+      const clean = responseText.replace(/```json|```/g, "").trim();
+      roadmap = JSON.parse(clean);
+    } catch {
+      return NextResponse.json(
+        { error: "Assessment failed", message: "Something went wrong. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    await supabase
+      .from("profiles")
+      .update({
+        career_path: roadmap.careerPath,
+        career_roles: roadmap.topRoles?.map((r: { title: string }) => r.title),
+        last_analysis_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    return NextResponse.json({ success: true, roadmap });
   } catch (error) {
+    console.error("[career-assessment] Unhandled error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed" },
+      { error: "Server error", message: "Something went wrong. Please try again." },
       { status: 500 }
     );
   }
