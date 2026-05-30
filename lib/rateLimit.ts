@@ -19,43 +19,75 @@ export async function checkRateLimit(userId: string, action: string) {
   const windowStart = new Date(Date.now() - 60 * 60 * 1000);
   const resetAt = new Date(Date.now() + 60 * 60 * 1000);
 
-  const { count, error } = await supabase
-    .from("usage_metrics")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("action", action)
-    .gte("created_at", windowStart.toISOString());
+  try {
+    const { count, error } = await supabase
+      .from("usage_metrics")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("action", action)
+      .gte("created_at", windowStart.toISOString());
 
-  if (error) {
-    console.error("[rateLimit] Supabase error:", error.message);
+    if (error) {
+      console.error("[rateLimit] Supabase error:", error.message);
+      return { allowed: true, remaining: limit, resetAt };
+    }
+
+    const used = count ?? 0;
+    const remaining = Math.max(0, limit - used);
+    const allowed = used < limit;
+
+    if (allowed) {
+      supabase
+        .from("usage_metrics")
+        .insert({ user_id: userId, action, created_at: new Date().toISOString() })
+        .then(({ error: insertError }) => {
+          if (insertError) console.error("[rateLimit] Failed to log usage:", insertError.message);
+        });
+    }
+
+    return { allowed, remaining, resetAt };
+  } catch {
     return { allowed: true, remaining: limit, resetAt };
   }
-
-  const used = count ?? 0;
-  const remaining = Math.max(0, limit - used);
-  const allowed = used < limit;
-
-  if (allowed) {
-    supabase
-      .from("usage_metrics")
-      .insert({ user_id: userId, action, created_at: new Date().toISOString() })
-      .then(({ error: insertError }) => {
-        if (insertError) console.error("[rateLimit] Failed to log usage:", insertError.message);
-      });
-  }
-
-  return { allowed, remaining, resetAt };
 }
 
 export async function getUserIdFromRequest(request: Request): Promise<string | null> {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
+  try {
+    // Try Authorization header first
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
 
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
+      // Create a client with the user's token
+      const userClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          global: {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        }
+      );
 
-  return data.user.id;
+      const { data, error } = await userClient.auth.getUser();
+      if (!error && data.user) {
+        return data.user.id;
+      }
+    }
+
+    // Fallback: try cookie-based session (for server-side rendering)
+    const { data, error } = await supabase.auth.getUser();
+    if (!error && data.user) {
+      return data.user.id;
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[getUserIdFromRequest] Error:", err);
+    return null;
+  }
 }
 
 export function rateLimitResponse(remaining: number, resetAt: Date): NextResponse {
