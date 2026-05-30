@@ -1,140 +1,136 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
+import { extractText } from "unpdf";
+import { checkRateLimit, getUserIdFromRequest, rateLimitResponse } from "@/lib/rateLimit";
+import { validatePdfUpload } from "@/lib/validateUpload";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const file = formData.get("resume") as File;
-    if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorised", message: "Please log in to analyse your resume." },
+        { status: 401 }
+      );
+    }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: "API key not configured" }, { status: 500 });
+    const { allowed, remaining, resetAt } = await checkRateLimit(userId, "analyze-resume");
+    if (!allowed) {
+      return rateLimitResponse(remaining, resetAt);
+    }
+
+    const formData = await request.formData();
+    const file = formData.get("resume") as File | null;
+
+    if (!file) {
+      return NextResponse.json(
+        { error: "No file", message: "Please upload your CV as a PDF." },
+        { status: 400 }
+      );
+    }
+
+    const validation = await validatePdfUpload(file);
+    if (!validation.valid) {
+      return validation.error!;
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
 
     let resumeText = "";
-    if (file.type === "application/pdf") {
-      const { getDocumentProxy } = await import("unpdf");
-      const buffer = await file.arrayBuffer();
-      const pdf = await getDocumentProxy(new Uint8Array(buffer));
-      const pages = await Promise.all(
-        Array.from({ length: pdf.numPages }, async (_, i) => {
-          const page = await pdf.getPage(i + 1);
-          const content = await page.getTextContent();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return content.items.map((item: any) => item.str || "").join(" ");
-        })
+    try {
+      const { text } = await extractText(uint8Array, { mergePages: true });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      resumeText = Array.isArray(text)
+        ? text.map((t: string) => t).join("\n")
+        : String(text);
+    } catch (extractError) {
+      console.error("[analyze-resume] PDF extraction failed:", extractError);
+      return NextResponse.json(
+        {
+          error: "Could not read PDF",
+          message: "We couldn't extract text from your CV. Make sure it's not a scanned image PDF.",
+        },
+        { status: 422 }
       );
-      resumeText = pages.join("\n");
-    } else {
-      resumeText = await file.text();
     }
 
-    if (!resumeText || resumeText.trim().length < 50) {
-      return NextResponse.json({ error: "Could not extract text from your CV. Please try a different file format." }, { status: 400 });
+    if (!resumeText || resumeText.trim().length < 100) {
+      return NextResponse.json(
+        {
+          error: "CV too short",
+          message: "We couldn't read enough text from your CV. Try a different PDF.",
+        },
+        { status: 422 }
+      );
     }
 
-    const prompt = `You are DAD — an expert career advisor and CV specialist. Analyse this resume and return a detailed assessment.
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      messages: [
+        {
+          role: "user",
+          content: `You are an expert career coach and ATS specialist. Analyse this CV and return a JSON object with exactly these fields:
 
-RESUME TEXT:
-${resumeText}
-
-Return ONLY valid JSON with no extra text:
 {
-  "summary": "2-3 honest sentences about the overall quality and positioning of this CV",
-  "skillGaps": [
-    { "skill": "skill name", "rating": "High|Mid|Low", "explanation": "why this matters" }
-  ],
-  "salaryRange": {
-    "min": 30000,
-    "max": 45000,
-    "currency": "GBP",
-    "explanation": "brief explanation of range"
-  },
-  "jobMatches": [
-    { "title": "Job Title", "demandLevel": "High|Medium|Low", "averageSalary": "£35k-£45k" }
-  ],
-  "courses": [
-    { "name": "Course name", "provider": "Coursera/Udemy/etc", "url": "#", "skillAddressed": "skill" }
-  ],
-  "atsScore": {
-    "score": 72,
-    "missingKeywords": ["keyword1", "keyword2"],
-    "formattingIssues": ["issue1"],
-    "improvements": [
-      { "title": "improvement title", "description": "what to do" }
-    ]
-  },
-  "resumeSummary": "One paragraph summary of this person's background, skills and experience level",
-  "topSkills": ["skill1", "skill2", "skill3", "skill4", "skill5"]
+  "atsScore": number (0-100),
+  "salaryRange": { "min": number, "max": number, "currency": "GBP" },
+  "currentLevel": string,
+  "topSkills": string[],
+  "missingKeywords": string[],
+  "skillGaps": string[],
+  "improvements": string[],
+  "formattingIssues": string[],
+  "jobMatches": [{ "title": string, "match": number, "reason": string }],
+  "courses": [{ "name": string, "provider": string, "reason": string }],
+  "summary": string
 }
 
-Rules: skillGaps 3-5, jobMatches 3-4, courses 3, improvements 3-4. Base everything on the actual resume content above.`;
+Return ONLY valid JSON. No explanation, no markdown, no backticks.
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 3000,
-        messages: [{ role: "user", content: prompt }],
-      }),
+CV TEXT:
+${resumeText}`,
+        },
+      ],
     });
 
-    if (!response.ok) return NextResponse.json({ error: "Claude API error" }, { status: 500 });
-
-    const claudeData = await response.json();
-    const text = claudeData.content?.[0]?.text || "";
+    const responseText = message.content[0].type === "text" ? message.content[0].text : "";
 
     let analysis;
     try {
-      const match = text.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error("No JSON found");
-      analysis = JSON.parse(match[0]);
+      const clean = responseText.replace(/```json|```/g, "").trim();
+      analysis = JSON.parse(clean);
     } catch {
-      return NextResponse.json({ error: "Failed to parse result" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Analysis failed", message: "Something went wrong. Please try again." },
+        { status: 500 }
+      );
     }
 
-    const flatAnalysis = {
-      summary: analysis.summary || "",
-      skillGaps: analysis.skillGaps || [],
-      salaryRange: analysis.salaryRange || { min: 0, max: 0, currency: "GBP", explanation: "" },
-      jobMatches: analysis.jobMatches || [],
-      courses: analysis.courses || [],
-      atsScore: {
-        score: Number(analysis.atsScore?.score ?? 0),
-        missingKeywords: analysis.atsScore?.missingKeywords || [],
-        formattingIssues: analysis.atsScore?.formattingIssues || [],
-        improvements: analysis.atsScore?.improvements || [],
-      },
-      resumeText,
-      resumeSummary: analysis.resumeSummary || "",
-      topSkills: analysis.topSkills || [],
-    };
+    await supabase
+      .from("profiles")
+      .update({
+        resume_summary: analysis.summary,
+        resume_ats_score: analysis.atsScore,
+        resume_skills: analysis.topSkills,
+        last_analysis_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
 
-    // Save to Supabase profile
-    try {
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("profiles").update({
-          resume_summary: flatAnalysis.resumeSummary,
-          resume_ats_score: flatAnalysis.atsScore.score,
-          resume_skills: flatAnalysis.topSkills,
-          last_analysis_at: new Date().toISOString(),
-        }).eq("id", user.id);
-      }
-    } catch { /* silent */ }
-
-    return NextResponse.json({ success: true, analysis: flatAnalysis });
+    return NextResponse.json({ success: true, analysis });
   } catch (error) {
+    console.error("[analyze-resume] Unhandled error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed" },
+      { error: "Server error", message: "Something went wrong. Please try again." },
       { status: 500 }
     );
   }
