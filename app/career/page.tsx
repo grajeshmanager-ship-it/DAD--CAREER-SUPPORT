@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import DadLoading from "@/components/ui/dad-loading";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface CareerResult {
   recommendedPath: string;
@@ -23,39 +29,13 @@ interface CareerResult {
 }
 
 const SITUATIONS = [
-  {
-    id: "student",
-    label: "Still Studying",
-    emoji: "🎓",
-    description: "Currently in university or college"
-  },
-  {
-    id: "fresh_graduate",
-    label: "Just Graduated",
-    emoji: "🎉",
-    description: "Graduated recently, looking for first job"
-  },
-  {
-    id: "job_seeker",
-    label: "Looking for Work",
-    emoji: "🔍",
-    description: "Have experience, actively job hunting"
-  },
-  {
-    id: "career_change",
-    label: "Changing Careers",
-    emoji: "🔄",
-    description: "Want to move into a different field"
-  },
-  {
-    id: "returning",
-    label: "Returning to Work",
-    emoji: "🌱",
-    description: "Coming back after a break"
-  },
+  { id: "student", label: "Still Studying", emoji: "🎓", description: "Currently in university or college" },
+  { id: "fresh_graduate", label: "Just Graduated", emoji: "🎉", description: "Graduated recently, looking for first job" },
+  { id: "job_seeker", label: "Looking for Work", emoji: "🔍", description: "Have experience, actively job hunting" },
+  { id: "career_change", label: "Changing Careers", emoji: "🔄", description: "Want to move into a different field" },
+  { id: "returning", label: "Returning to Work", emoji: "🌱", description: "Coming back after a break" },
 ];
 
-// Situation-specific questions
 const SITUATION_QUESTIONS: Record<string, {
   step2Title: string;
   step2Description: string;
@@ -169,45 +149,17 @@ const SITUATION_QUESTIONS: Record<string, {
 };
 
 const SITUATION_PROMPTS: Record<string, string> = {
-  student: `This person is currently a student who hasn't graduated yet. They need:
-1. Career direction — what path suits them based on their studies and interests
-2. What to do RIGHT NOW before they graduate to maximise their chances
-3. Internship and experience-building strategy
-4. Skills to develop immediately
-5. Realistic roles to target upon graduation
-Be forward-looking and practical. They have time — use it well.`,
+  student: `This person is currently a student who hasn't graduated yet. They need career direction, what to do right now before they graduate, internship strategy, skills to develop, and realistic roles to target upon graduation.`,
+  fresh_graduate: `This person just graduated and is struggling to break into the job market. They need honest assessment of which roles they qualify for right now, how to position their degree, entry-level pathways, and fast-track actions to get their first role.`,
+  job_seeker: `This person has experience but is struggling to find work. Diagnose what's likely going wrong, whether they're targeting the right roles, how to position their experience more effectively, and whether a pivot or upskill would help.`,
+  career_change: `This person wants to change careers entirely. Give honest assessment of whether their target field is realistic, how to leverage transferable skills, what retraining is actually necessary, realistic timeline and salary expectations, and bridge roles.`,
+  returning: `This person is returning to work after a break. Help them address and frame their career gap, what has changed in their industry, returnship strategies, confidence-building steps, and realistic expectations for salary and level.`,
+};
 
-  fresh_graduate: `This person just graduated and is struggling to break into the job market with no/little experience. They need:
-1. Honest assessment of which roles they realistically qualify for RIGHT NOW
-2. How to position their degree and any experience they have
-3. Entry-level pathways that accept fresh graduates
-4. What's likely going wrong with their search (if they've been applying)
-5. Fast-track actions to get their first role
-Be honest about the market reality but give them a clear, actionable path.`,
-
-  job_seeker: `This person has experience but is struggling to find work. They need:
-1. Diagnosis of what's likely going wrong in their search
-2. Whether they're targeting the right roles for their background
-3. How to position their experience more effectively
-4. Specific strategies to improve response rates and interviews
-5. Whether a pivot or upskill would help
-Be direct and diagnostic. Don't just encourage — identify the actual problem.`,
-
-  career_change: `This person wants to change careers entirely. They need:
-1. Honest assessment of whether their target field is realistic given their background
-2. How to leverage transferable skills from their current career
-3. What retraining or qualifications (if any) are actually necessary
-4. Realistic timeline and salary expectations for the transition
-5. Bridge roles that can help them make the switch gradually
-Be realistic about the challenges but give them a genuine roadmap.`,
-
-  returning: `This person is returning to work after a break. They need:
-1. How to address and frame their career gap positively
-2. What has changed in their industry and what they need to update
-3. Returnship programmes or re-entry strategies specific to their field
-4. Confidence-building steps before applying
-5. Realistic expectations for salary and level when returning
-Be encouraging but honest about what re-entry actually looks like.`,
+const emptyForm = {
+  situation: "", education: "", experience: "", interests: "",
+  skills: "", goals: "", country: "", graduationDate: "",
+  applied: "", whyLeaving: "", breakReason: "", concerns: "",
 };
 
 export default function CareerPage() {
@@ -215,23 +167,16 @@ export default function CareerPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CareerResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<Record<string, string>>({
-    situation: "",
-    education: "",
-    experience: "",
-    interests: "",
-    skills: "",
-    goals: "",
-    country: "",
-    graduationDate: "",
-    applied: "",
-    whyLeaving: "",
-    breakReason: "",
-    concerns: "",
-  });
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, string>>(emptyForm);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthToken(data.session?.access_token ?? null);
+    });
+  }, []);
 
   const update = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-
   const selectedSituation = SITUATION_QUESTIONS[form.situation];
 
   const handleSubmit = async () => {
@@ -240,15 +185,19 @@ export default function CareerPage() {
     try {
       const res = await fetch("/api/career-assessment", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: JSON.stringify({
-          ...form,
+          situation: form.situation,
+          answers: form,
           situationContext: SITUATION_PROMPTS[form.situation] || "",
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to generate assessment");
-      setResult(data.result);
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || "Failed to generate assessment");
+      setResult(data.roadmap);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -259,7 +208,7 @@ export default function CareerPage() {
   const isStep2Valid = () => {
     if (!selectedSituation) return false;
     return selectedSituation.fields.step2.every(f => {
-      if (f.key === "graduationDate" || f.key === "applied" || f.key === "whyLeaving" || f.key === "breakReason") return true;
+      if (["graduationDate", "applied", "whyLeaving", "breakReason"].includes(f.key)) return true;
       return form[f.key]?.trim().length > 0;
     });
   };
@@ -295,7 +244,6 @@ export default function CareerPage() {
               </p>
             </div>
 
-            {/* Progress bar */}
             <div className="w-full bg-border rounded-full h-1.5">
               <div
                 className="bg-primary h-1.5 rounded-full transition-all duration-500"
@@ -303,16 +251,12 @@ export default function CareerPage() {
               />
             </div>
 
-            {/* STEP 1 — Situation selection */}
             {step === 1 && (
               <Card className="p-6 border border-border bg-card/50 space-y-6">
                 <div>
                   <h2 className="font-semibold text-xl mb-1">Where are you right now?</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Be honest. DAD asks different questions for each situation.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Be honest. DAD asks different questions for each situation.</p>
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {SITUATIONS.map(s => (
                     <button
@@ -330,114 +274,67 @@ export default function CareerPage() {
                     </button>
                   ))}
                 </div>
-
-                <Button
-                  onClick={() => setStep(2)}
-                  className="w-full rounded-full"
-                  size="lg"
-                  disabled={!form.situation}
-                >
+                <Button onClick={() => setStep(2)} className="w-full rounded-full" size="lg" disabled={!form.situation}>
                   Continue <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Card>
             )}
 
-            {/* STEP 2 — Situation-specific questions part 1 */}
             {step === 2 && selectedSituation && (
               <Card className="p-6 border border-border bg-card/50 space-y-5">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl">
-                      {SITUATIONS.find(s => s.id === form.situation)?.emoji}
-                    </span>
+                    <span className="text-2xl">{SITUATIONS.find(s => s.id === form.situation)?.emoji}</span>
                     <h2 className="font-semibold text-xl">{selectedSituation.step2Title}</h2>
                   </div>
                   <p className="text-sm text-muted-foreground">{selectedSituation.step2Description}</p>
                 </div>
-
                 {selectedSituation.fields.step2.map(field => (
                   <div key={field.key}>
                     <label className="block text-sm font-medium mb-2">{field.label}</label>
                     {field.type === "input" ? (
-                      <Input
-                        placeholder={field.placeholder}
-                        value={form[field.key] || ""}
-                        onChange={e => update(field.key, e.target.value)}
-                        className="bg-background"
-                      />
+                      <Input placeholder={field.placeholder} value={form[field.key] || ""} onChange={e => update(field.key, e.target.value)} className="bg-background" />
                     ) : (
-                      <Textarea
-                        placeholder={field.placeholder}
-                        value={form[field.key] || ""}
-                        onChange={e => update(field.key, e.target.value)}
-                        className="bg-background resize-none min-h-[90px]"
-                      />
+                      <Textarea placeholder={field.placeholder} value={form[field.key] || ""} onChange={e => update(field.key, e.target.value)} className="bg-background resize-none min-h-[90px]" />
                     )}
                   </div>
                 ))}
-
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="rounded-full gap-2">
                     <ArrowLeft className="w-4 h-4" /> Back
                   </Button>
-                  <Button
-                    onClick={() => setStep(3)}
-                    className="flex-1 rounded-full"
-                    size="lg"
-                    disabled={!isStep2Valid()}
-                  >
+                  <Button onClick={() => setStep(3)} className="flex-1 rounded-full" size="lg" disabled={!isStep2Valid()}>
                     Continue <ArrowRight className="ml-2 w-4 h-4" />
                   </Button>
                 </div>
               </Card>
             )}
 
-            {/* STEP 3 — Situation-specific questions part 2 */}
             {step === 3 && selectedSituation && (
               <Card className="p-6 border border-border bg-card/50 space-y-5">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-2xl">
-                      {SITUATIONS.find(s => s.id === form.situation)?.emoji}
-                    </span>
+                    <span className="text-2xl">{SITUATIONS.find(s => s.id === form.situation)?.emoji}</span>
                     <h2 className="font-semibold text-xl">{selectedSituation.step3Title}</h2>
                   </div>
                   <p className="text-sm text-muted-foreground">{selectedSituation.step3Description}</p>
                 </div>
-
                 {selectedSituation.fields.step3.map(field => (
                   <div key={field.key}>
                     <label className="block text-sm font-medium mb-2">{field.label}</label>
                     {field.type === "input" ? (
-                      <Input
-                        placeholder={field.placeholder}
-                        value={form[field.key] || ""}
-                        onChange={e => update(field.key, e.target.value)}
-                        className="bg-background"
-                      />
+                      <Input placeholder={field.placeholder} value={form[field.key] || ""} onChange={e => update(field.key, e.target.value)} className="bg-background" />
                     ) : (
-                      <Textarea
-                        placeholder={field.placeholder}
-                        value={form[field.key] || ""}
-                        onChange={e => update(field.key, e.target.value)}
-                        className="bg-background resize-none min-h-[90px]"
-                      />
+                      <Textarea placeholder={field.placeholder} value={form[field.key] || ""} onChange={e => update(field.key, e.target.value)} className="bg-background resize-none min-h-[90px]" />
                     )}
                   </div>
                 ))}
-
                 {error && <p className="text-sm text-destructive">{error}</p>}
-
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(2)} className="rounded-full gap-2">
                     <ArrowLeft className="w-4 h-4" /> Back
                   </Button>
-                  <Button
-                    onClick={handleSubmit}
-                    className="flex-1 rounded-full"
-                    size="lg"
-                    disabled={!isStep3Valid()}
-                  >
+                  <Button onClick={handleSubmit} className="flex-1 rounded-full" size="lg" disabled={!isStep3Valid()}>
                     Get My Roadmap <ArrowRight className="ml-2 w-4 h-4" />
                   </Button>
                 </div>
@@ -446,12 +343,7 @@ export default function CareerPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setResult(null); setStep(1); setForm({ situation: "", education: "", experience: "", interests: "", skills: "", goals: "", country: "", graduationDate: "", applied: "", whyLeaving: "", breakReason: "", concerns: "" }); }}
-              className="rounded-full gap-2 mb-4"
-            >
+            <Button variant="outline" size="sm" onClick={() => { setResult(null); setStep(1); setForm(emptyForm); }} className="rounded-full gap-2 mb-4">
               <ArrowLeft className="w-4 h-4" /> Start over
             </Button>
 
@@ -543,11 +435,7 @@ export default function CareerPage() {
             </Card>
 
             <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => { setResult(null); setStep(1); }}
-                className="flex-1 rounded-full"
-              >
+              <Button variant="outline" onClick={() => { setResult(null); setStep(1); setForm(emptyForm); }} className="flex-1 rounded-full">
                 Start Over
               </Button>
               <Link href="/interview" className="flex-1">
