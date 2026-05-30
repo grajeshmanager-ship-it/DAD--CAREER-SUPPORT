@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -9,6 +9,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import DadLoading from "@/components/ui/dad-loading";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface SkillGap {
   skill: string;
@@ -57,6 +63,23 @@ export default function ResumePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthToken(data.session?.access_token ?? null);
+    });
+  }, []);
+
+  const handleFileChange = (selectedFile: File) => {
+    if (!selectedFile.name.toLowerCase().endsWith(".pdf")) {
+      setError("Only PDF files are accepted. Please convert your CV to PDF and try again.");
+      setFile(null);
+      return;
+    }
+    setError(null);
+    setFile(selectedFile);
+  };
 
   const handleUpload = async () => {
     if (!file) return;
@@ -67,10 +90,13 @@ export default function ResumePage() {
       formData.append("resume", file);
       const res = await fetch("/api/analyze-resume", {
         method: "POST",
+        headers: {
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: formData,
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to analyse resume");
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || "Failed to analyse resume");
       setResult(data.analysis);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -146,7 +172,7 @@ export default function ResumePage() {
                 onDrop={(e) => {
                   e.preventDefault();
                   const dropped = e.dataTransfer.files[0];
-                  if (dropped) setFile(dropped);
+                  if (dropped) handleFileChange(dropped);
                 }}
               >
                 <input
@@ -154,7 +180,10 @@ export default function ResumePage() {
                   type="file"
                   accept=".pdf"
                   className="hidden"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    const selected = e.target.files?.[0];
+                    if (selected) handleFileChange(selected);
+                  }}
                 />
                 {file ? (
                   <div className="space-y-3">
@@ -378,7 +407,7 @@ export default function ResumePage() {
                 <Button className="w-full rounded-full">
                   Practice Interview Next <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
-              </Link>
+                </Link>
             </div>
           </div>
         )}
