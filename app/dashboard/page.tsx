@@ -74,10 +74,12 @@ export default function DashboardPage() {
     load();
   }, [router]);
 
-  // Voice on load — companion-aware
+  // Voice on load — once per session only
   useEffect(() => {
     if (loading || !profile || hasSpoken.current) return;
+    if (sessionStorage.getItem("dad_dashboard_welcomed")) return;
     hasSpoken.current = true;
+    sessionStorage.setItem("dad_dashboard_welcomed", "1");
 
     const speak = () => {
       if (!window.speechSynthesis) return;
@@ -108,6 +110,7 @@ export default function DashboardPage() {
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
+    sessionStorage.removeItem("dad_dashboard_welcomed");
     router.push("/");
   };
 
@@ -129,7 +132,6 @@ export default function DashboardPage() {
   const hasCareer = !!profile?.career_path;
   const atsScore = profile?.resume_ats_score || 0;
 
-  // Determine next best action
   const nextAction = !hasResume
     ? { label: "Upload your CV", desc: "Let " + companionName + " learn who you are. This is where everything starts.", href: "/resume", phase: "First step" }
     : !hasCareer
@@ -164,13 +166,12 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* ── HERO — What DAD knows ── */}
+      {/* ── HERO ── */}
       <section style={{
         display: "grid", gridTemplateColumns: "55% 45%",
         borderBottom: "0.5px solid rgba(201,168,76,0.08)",
         minHeight: "52vh",
       }}>
-        {/* Left — greeting and companion voice */}
         <div style={{
           padding: "56px 52px",
           borderRight: "0.5px solid rgba(201,168,76,0.08)",
@@ -196,7 +197,6 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Situation tag */}
           <div style={{ position: "relative", zIndex: 1 }}>
             {profile?.situation && (
               <div style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
@@ -210,7 +210,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Right — what DAD knows */}
         <div style={{ padding: "56px 48px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", marginBottom: "28px", fontFamily: sans }}>
@@ -218,7 +217,6 @@ export default function DashboardPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {/* Resume */}
               <div style={{ padding: "18px 0", borderBottom: "0.5px solid rgba(201,168,76,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
                   <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: hasResume ? gold : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "4px" }}>
@@ -235,19 +233,15 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Career */}
-              <div style={{ padding: "18px 0", borderBottom: "0.5px solid rgba(201,168,76,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: hasCareer ? gold : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "4px" }}>
-                    Your direction
-                  </div>
-                  <div style={{ fontSize: "12px", color: hasCareer ? "rgba(235,229,220,0.55)" : "rgba(235,229,220,0.18)", fontFamily: sans, fontWeight: "300" }}>
-                    {hasCareer ? profile?.career_path : "Assessment not completed"}
-                  </div>
+              <div style={{ padding: "18px 0", borderBottom: "0.5px solid rgba(201,168,76,0.06)" }}>
+                <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: hasCareer ? gold : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "4px" }}>
+                  Your direction
+                </div>
+                <div style={{ fontSize: "12px", color: hasCareer ? "rgba(235,229,220,0.55)" : "rgba(235,229,220,0.18)", fontFamily: sans, fontWeight: "300" }}>
+                  {hasCareer ? profile?.career_path : "Assessment not completed"}
                 </div>
               </div>
 
-              {/* Skills */}
               <div style={{ padding: "18px 0", borderBottom: "0.5px solid rgba(201,168,76,0.06)" }}>
                 <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: profile?.resume_skills?.length ? gold : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "8px" }}>
                   Your skills
@@ -267,7 +261,6 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Roles */}
               <div style={{ padding: "18px 0" }}>
                 <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: profile?.career_roles?.length ? gold : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "8px" }}>
                   Target roles
@@ -288,19 +281,17 @@ export default function DashboardPage() {
       </section>
 
       {/* ── NEXT ACTION ── */}
-      <section style={{
-        padding: "0",
-        borderBottom: "0.5px solid rgba(201,168,76,0.08)",
-      }}>
+      <section style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
         <Link href={nextAction.href} style={{ textDecoration: "none", display: "block" }}>
-          <div style={{
-            padding: "48px 52px",
-            display: "grid", gridTemplateColumns: "1fr auto",
-            alignItems: "center", gap: "40px",
-            background: "rgba(201,168,76,0.02)",
-            cursor: "pointer",
-            transition: "background 0.3s",
-          }}
+          <div
+            style={{
+              padding: "48px 52px",
+              display: "grid", gridTemplateColumns: "1fr auto",
+              alignItems: "center", gap: "40px",
+              background: "rgba(201,168,76,0.02)",
+              cursor: "pointer",
+              transition: "background 0.3s",
+            }}
             onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(201,168,76,0.04)"}
             onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(201,168,76,0.02)"}
           >
@@ -328,10 +319,7 @@ export default function DashboardPage() {
 
       {/* ── ALL CAPABILITIES ── */}
       <section style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
-        <div style={{
-          display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr",
-          gap: "1px", background: "rgba(201,168,76,0.06)",
-        }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
           {[
             {
               href: "/resume",
@@ -363,19 +351,12 @@ export default function DashboardPage() {
             },
           ].map((item, i) => (
             <Link key={i} href={item.href} style={{ textDecoration: "none", display: "block" }}>
-              <div style={{
-                background: bg, padding: "40px 36px",
-                cursor: "pointer", height: "100%",
-                transition: "background 0.25s",
-              }}
+              <div
+                style={{ background: bg, padding: "40px 36px", cursor: "pointer", height: "100%", transition: "background 0.25s" }}
                 onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(201,168,76,0.03)"}
                 onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = bg}
               >
-                <div style={{
-                  fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase",
-                  color: item.tagActive ? companionColor : "rgba(235,229,220,0.2)",
-                  fontFamily: sans, marginBottom: "16px",
-                }}>
+                <div style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: item.tagActive ? companionColor : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "16px" }}>
                   {item.tag}
                 </div>
                 <div style={{ fontSize: "15px", fontWeight: "300", color: text, marginBottom: "12px", lineHeight: "1.3" }}>
@@ -398,22 +379,19 @@ export default function DashboardPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
           {[
             {
-              phase: "Dream",
-              color: gold,
-              status: "Active",
+              phase: "Dream", color: gold, num: "01",
+              status: hasCareer ? "Active" : "Waiting",
               desc: hasCareer ? profile?.career_path || "Career direction set" : "Tell " + companionName + " who you want to become",
               done: hasCareer,
             },
             {
-              phase: "Action",
-              color: "#6B8CFF",
+              phase: "Action", color: "#6B8CFF", num: "02",
               status: hasResume && hasCareer ? "In progress" : "Not started",
               desc: hasResume ? "CV analysed · " + (hasCareer ? "Direction set · Practice interviews" : "Career assessment next") : "Upload your CV to begin",
               done: hasResume,
             },
             {
-              phase: "Destiny",
-              color: "#5B9E7A",
+              phase: "Destiny", color: "#5B9E7A", num: "03",
               status: "Ahead",
               desc: "The offer. The role. The life. " + companionName + " is walking you there.",
               done: false,
@@ -421,7 +399,7 @@ export default function DashboardPage() {
           ].map((item, i) => (
             <div key={i} style={{ background: bg, padding: "36px 40px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-                <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.18)", fontFamily: sans }}>{String(i + 1).padStart(2, "0")}</span>
+                <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.18)", fontFamily: sans }}>{item.num}</span>
                 <div style={{ flex: 1, height: "0.5px", background: `${item.color}30` }} />
                 <span style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: item.color, fontFamily: sans }}>{item.phase}</span>
               </div>
@@ -437,10 +415,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Footer */}
-      <footer style={{
-        padding: "24px 52px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-      }}>
+      <footer style={{ padding: "24px 52px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: "10px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans }}>DAD</div>
         <div style={{ fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans, letterSpacing: "0.1em", textTransform: "uppercase" }}>
           Dreams · Actions · Destiny
