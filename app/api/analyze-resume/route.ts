@@ -15,7 +15,7 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
-const effectiveUserId = userId ?? "anonymous";
+const effectiveUserId = (await getUserIdFromRequest(request)) ?? "anonymous";
 
     const { allowed, remaining, resetAt } = await checkRateLimit(effectiveUserId, "analyze-resume");
     if (!allowed) {
