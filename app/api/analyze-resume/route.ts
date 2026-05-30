@@ -15,12 +15,7 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(request);
-if (!userId) {
-  return NextResponse.json(
-    { error: "Unauthorised", message: "Please log in to analyse your resume." },
-    { status: 401 }
-  );
-}
+const effectiveUserId = userId ?? "anonymous";
 
     const { allowed, remaining, resetAt } = await checkRateLimit(userId, "analyze-resume");
     if (!allowed) {
