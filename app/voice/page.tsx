@@ -84,6 +84,7 @@ export default function VoicePage() {
   const frameRef = useRef<number>(0);
   const tRef = useRef(0);
   const analyzeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasSpoken = useRef(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -101,6 +102,38 @@ export default function VoicePage() {
       }
     };
     loadProfile();
+  }, []);
+
+  // Voice on load — once per session
+  useEffect(() => {
+    if (hasSpoken.current || sessionStorage.getItem("dad_voice_voiced")) return;
+    hasSpoken.current = true;
+    sessionStorage.setItem("dad_voice_voiced", "1");
+
+    const speak = () => {
+      if (!window.speechSynthesis) return;
+      const utter = new SpeechSynthesisUtterance(
+        "I'm here. Take your time. Whatever is on your mind — this is the place to say it."
+      );
+      utter.rate = 0.78;
+      utter.pitch = 0.86;
+      utter.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find(v => v.name.includes("Daniel")) ||
+        voices.find(v => v.name.includes("Arthur")) ||
+        voices.find(v => v.lang === "en-GB") ||
+        voices.find(v => v.lang.startsWith("en")) ||
+        voices[0];
+      if (preferred) utter.voice = preferred;
+      window.speechSynthesis.speak(utter);
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      setTimeout(speak, 900);
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 900);
+    }
   }, []);
 
   useEffect(() => {
