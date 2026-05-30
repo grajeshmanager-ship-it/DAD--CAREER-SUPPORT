@@ -540,7 +540,7 @@ export default function LandingPage() {
           position: "absolute", top: "50%", left: "50%",
           transform: "translate(-50%,-50%)",
           fontSize: "clamp(140px, 24vw, 320px)", fontWeight: "700",
-          color: "rgba(201,168,76,0.03)", letterSpacing: "-0.04em",
+          color: "rgba(201,168,76,0.08)", letterSpacing: "-0.04em",
           whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none",
           lineHeight: "1", fontFamily: serif,
         }}>
