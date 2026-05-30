@@ -1,296 +1,487 @@
 "use client";
 
-import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Loader2, ArrowRight, Heart } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const COMPANIONS = [
-  { id: "dad", emoji: "👨", label: "Dad", prompt: "What's his name?" },
-  { id: "mom", emoji: "👩", label: "Mom", prompt: "What's her name?" },
-  { id: "brother", emoji: "👦", label: "Brother", prompt: "What's his name?" },
-  { id: "sister", emoji: "👧", label: "Sister", prompt: "What's her name?" },
-  { id: "teacher", emoji: "🧑‍🏫", label: "Teacher", prompt: "What's their name?" },
-  { id: "mentor", emoji: "🧭", label: "Mentor", prompt: "What's their name?" },
-  { id: "friend", emoji: "🤝", label: "Friend", prompt: "What's their name?" },
-  { id: "partner", emoji: "💑", label: "Partner", prompt: "What's their name?" },
-  { id: "self", emoji: "⭐", label: "I guide myself", prompt: "What's your name?" },
+  {
+    type: "dad",
+    label: "Father",
+    sub: "Dad",
+    color: "#C9A84C",
+    description: "He has watched you struggle and never once stopped believing. Direct. Proud. The kind of presence that makes you want to be better just by being in the room.",
+    greeting: (name: string, you: string) => `${you}. I've been waiting for you. Let's get to work.`,
+  },
+  {
+    type: "mom",
+    label: "Mother",
+    sub: "Mum",
+    color: "#A07898",
+    description: "She will hold you together when you cannot hold yourself. Warm beyond measure. Wise beyond words. The one who sees who you really are.",
+    greeting: (name: string, you: string) => `${you}, sweetheart. I'm here. We're going to figure this out together.`,
+  },
+  {
+    type: "mentor",
+    label: "Mentor",
+    sub: "Mentor",
+    color: "#6B8CFF",
+    description: "Strategic. Calm. He has been where you are going and knows exactly which turns to take. He sees the version of you that you have not met yet.",
+    greeting: (name: string, you: string) => `Good. You showed up. That's always the hardest part. Now let's talk about where you're going.`,
+  },
+  {
+    type: "brother",
+    label: "Brother",
+    sub: "Brother",
+    color: "#5B8C6B",
+    description: "Honest. Competitive. He will not let you settle for less than you deserve — and he will give you grief if you try. The push you actually need.",
+    greeting: (name: string, you: string) => `Finally. I was wondering when you'd get serious. Let's go.`,
+  },
+  {
+    type: "sister",
+    label: "Sister",
+    sub: "Sister",
+    color: "#B07070",
+    description: "Sharp. Empathetic. She reads every room before you walk into it. Always in your corner. Never lets you walk in underprepared.",
+    greeting: (name: string, you: string) => `Okay, I'm here. Tell me everything. What are we working with?`,
+  },
+  {
+    type: "friend",
+    label: "Friend",
+    sub: "Friend",
+    color: "#5B9898",
+    description: "Real talk. No filter. No performance. The one who tells you the truth when everyone else is being polite. Rides with you through all of it.",
+    greeting: (name: string, you: string) => `Right, so — what's actually going on? Talk to me.`,
+  },
+  {
+    type: "partner",
+    label: "Partner",
+    sub: "Partner",
+    color: "#8870A8",
+    description: "Patient. Devoted. They believe in your dream as much as you do — sometimes more. The one who never lets you give up on yourself.",
+    greeting: (name: string, you: string) => `I'm so glad you're doing this. I've always known you could. Let's build this together.`,
+  },
 ];
 
+type Step = "choose" | "name" | "account" | "meeting";
+
 export default function SignupPage() {
-  const router = useRouter();
-  const [step, setStep] = useState<"account" | "companion" | "profile">("account");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedCompanion, setSelectedCompanion] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>("choose");
+  const [selectedCompanion, setSelectedCompanion] = useState<number | null>(null);
   const [companionName, setCompanionName] = useState("");
+  const [userName, setUserName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [hoveredCompanion, setHoveredCompanion] = useState<number | null>(null);
+  const hasSpoken = useRef(false);
 
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-    fullName: "",
-    age: "",
-    country: "",
-    situation: "",
-  });
+  const sans = "'Helvetica Neue', Arial, sans-serif";
+  const serif = "'Georgia', 'Times New Roman', serif";
+  const gold = "#C9A84C";
+  const bg = "#070606";
+  const text = "#EBE5DC";
 
-  const update = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const companion = selectedCompanion !== null ? COMPANIONS[selectedCompanion] : null;
+  const displayedCompanion = hoveredCompanion !== null ? COMPANIONS[hoveredCompanion] : companion;
 
-  const companion = COMPANIONS.find((c) => c.id === selectedCompanion);
+  // Voice greeting on meeting screen
+  useEffect(() => {
+    if (step !== "meeting" || hasSpoken.current || !companion) return;
+    hasSpoken.current = true;
 
-  const handleAccountStep = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.email || !form.password) return;
-    if (form.password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
+    const speak = () => {
+      if (!window.speechSynthesis) return;
+      const greeting = companion.greeting(companionName, userName || "Hey");
+      const utter = new SpeechSynthesisUtterance(greeting);
+      utter.rate = 0.84;
+      utter.pitch = companion.type === "mom" ? 1.1 : companion.type === "sister" ? 1.05 : 0.88;
+      utter.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v => v.lang === "en-GB") ||
+        voices.find(v => v.lang.startsWith("en")) || voices[0];
+      if (preferred) utter.voice = preferred;
+      window.speechSynthesis.speak(utter);
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      setTimeout(speak, 1200);
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 1200);
     }
-    setError(null);
-    setStep("companion");
-  };
+  }, [step]);
 
-  const handleCompanionStep = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCompanion) {
-      setError("Please choose who will guide you.");
-      return;
-    }
-    if (!companionName.trim()) {
-      setError("Please enter a name.");
-      return;
-    }
-    setError(null);
-    setStep("profile");
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.fullName || !form.country || !form.situation) {
+  const handleSignup = async () => {
+    if (!email || !password || !userName) {
       setError("Please fill in all fields.");
       return;
     }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
     setLoading(true);
-    setError(null);
+    setError("");
 
     try {
-      const supabase = createClient();
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: {
-          data: {
-            full_name: form.fullName,
-            age: form.age,
-            country: form.country,
-            situation: form.situation,
-            companion_type: selectedCompanion,
-            companion_name: companionName,
-          },
-        },
-      });
-
-      if (signUpError) throw signUpError;
+      const { data, error: signupError } = await supabase.auth.signUp({ email, password });
+      if (signupError) throw signupError;
 
       if (data.user) {
         await supabase.from("profiles").upsert({
           id: data.user.id,
-          email: form.email,
-          full_name: form.fullName,
-          age: form.age ? parseInt(form.age) : null,
-          country: form.country,
-          situation: form.situation,
-          companion_type: selectedCompanion,
-          companion_name: companionName,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          email,
+          full_name: userName,
+          companion_type: companion?.type,
+          companion_name: companionName || companion?.sub,
         });
       }
-
-      router.push("/dashboard");
-    } catch (err) {
+      setStep("meeting");
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const stepNumber = step === "account" ? 1 : step === "companion" ? 2 : 3;
+  // ── STEP: CHOOSE ──
+  if (step === "choose") {
+    return (
+      <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif, display: "flex", flexDirection: "column" }}>
 
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 relative overflow-hidden">
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-primary/10 rounded-full blur-[120px] opacity-60 pointer-events-none" />
+        {/* Nav */}
+        <nav style={{ padding: "20px 52px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
+          <Link href="/" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
+          <Link href="/login" style={{ fontSize: "11px", color: "rgba(235,229,220,0.3)", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>
+            Already have an account →
+          </Link>
+        </nav>
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="text-center mb-8">
-          <Link href="/" className="text-3xl font-bold text-primary">DAD</Link>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Whoever stood beside you — we become that support.
-          </p>
+        <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "calc(100vh - 61px)" }}>
+
+          {/* Left — headline */}
+          <div style={{
+            padding: "60px 52px",
+            borderRight: "0.5px solid rgba(201,168,76,0.08)",
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+            position: "relative", overflow: "hidden",
+          }}>
+            <div style={{
+              position: "absolute", bottom: 0, left: 0, right: 0, height: "60%",
+              background: displayedCompanion
+                ? `radial-gradient(ellipse at 20% 100%, ${displayedCompanion.color}12 0%, transparent 70%)`
+                : "none",
+              transition: "background 1s ease", pointerEvents: "none",
+            }} />
+
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "36px", fontFamily: sans }}>
+                Step one
+              </div>
+              <h1 style={{ fontSize: "clamp(36px, 5vw, 64px)", fontWeight: "300", lineHeight: "1.1", color: text, letterSpacing: "-0.02em", marginBottom: "24px" }}>
+                Who walks<br />beside you?
+              </h1>
+              <p style={{ fontSize: "15px", color: "rgba(235,229,220,0.4)", lineHeight: "1.9", fontFamily: sans, fontWeight: "300", maxWidth: "360px", margin: 0 }}>
+                This is not a chatbot you are configuring.
+                This is a relationship you are choosing.
+                Take your time. It matters.
+              </p>
+            </div>
+
+            {/* Selected companion preview */}
+            <div style={{ position: "relative", zIndex: 1, minHeight: "120px" }}>
+              {displayedCompanion ? (
+                <div style={{ transition: "opacity 0.4s" }}>
+                  <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: displayedCompanion.color, marginBottom: "12px", fontFamily: sans, transition: "color 0.4s" }}>
+                    {displayedCompanion.label}
+                  </div>
+                  <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.5)", lineHeight: "1.8", fontFamily: sans, fontWeight: "300", maxWidth: "360px", margin: "0 0 28px" }}>
+                    {displayedCompanion.description}
+                  </p>
+                  {selectedCompanion !== null && hoveredCompanion === null && (
+                    <button onClick={() => setStep("name")} style={{
+                      display: "inline-flex", alignItems: "center", gap: "14px",
+                      background: gold, color: bg, padding: "16px 36px", border: "none",
+                      cursor: "pointer", fontSize: "11px", letterSpacing: "0.14em",
+                      textTransform: "uppercase", fontFamily: sans,
+                    }}>
+                      Continue with {companion?.label} →
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.2)", fontFamily: sans, fontStyle: "italic" }}>
+                  Select a relationship to continue
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Right — companion grid */}
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {COMPANIONS.map((comp, i) => (
+              <div key={i}
+                onClick={() => setSelectedCompanion(i)}
+                onMouseEnter={() => setHoveredCompanion(i)}
+                onMouseLeave={() => setHoveredCompanion(null)}
+                style={{
+                  flex: 1,
+                  padding: "0 52px",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  cursor: "pointer",
+                  borderBottom: "0.5px solid rgba(201,168,76,0.06)",
+                  borderLeft: selectedCompanion === i ? `2px solid ${comp.color}` : "2px solid transparent",
+                  background: selectedCompanion === i ? `${comp.color}06` : hoveredCompanion === i ? "rgba(235,229,220,0.015)" : "transparent",
+                  transition: "all 0.25s ease",
+                  minHeight: "80px",
+                }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+                  <div style={{
+                    width: "36px", height: "36px", borderRadius: "50%",
+                    border: `0.5px solid ${selectedCompanion === i || hoveredCompanion === i ? comp.color : "rgba(201,168,76,0.15)"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "border-color 0.3s",
+                    flexShrink: 0,
+                  }}>
+                    {selectedCompanion === i && (
+                      <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: comp.color }} />
+                    )}
+                  </div>
+                  <div>
+                    <div style={{
+                      fontSize: "14px", letterSpacing: "0.06em",
+                      color: selectedCompanion === i ? comp.color : hoveredCompanion === i ? "rgba(235,229,220,0.7)" : "rgba(235,229,220,0.35)",
+                      fontFamily: sans, transition: "color 0.3s",
+                      textTransform: "uppercase", marginBottom: "2px",
+                    }}>
+                      {comp.sub}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "rgba(235,229,220,0.25)", fontFamily: sans }}>
+                      {comp.label}
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: "18px", color: selectedCompanion === i ? comp.color : "rgba(235,229,220,0.1)",
+                  fontFamily: sans, transition: "color 0.3s",
+                }}>
+                  →
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── STEP: NAME ──
+  if (step === "name") {
+    return (
+      <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px" }}>
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+          fontSize: "clamp(120px, 20vw, 260px)", fontWeight: "700",
+          color: `${companion?.color}06`, letterSpacing: "-0.04em",
+          whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none",
+          lineHeight: "1",
+        }}>
+          {companion?.sub}
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-8 shadow-xl">
-          {/* Step indicator */}
-          <div className="flex items-center gap-2 mb-8">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="flex items-center gap-2 flex-1">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all flex-shrink-0 ${
-                  stepNumber >= n ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                }`}>{n}</div>
-                {n < 3 && <div className={`flex-1 h-0.5 transition-all ${stepNumber > n ? "bg-primary" : "bg-border"}`} />}
+        <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: "480px", width: "100%" }}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: companion?.color, marginBottom: "32px", fontFamily: sans }}>
+            Step two · {companion?.label}
+          </div>
+          <h2 style={{ fontSize: "clamp(32px, 5vw, 56px)", fontWeight: "300", color: text, lineHeight: "1.1", marginBottom: "16px" }}>
+            What will you<br />call them?
+          </h2>
+          <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", lineHeight: "1.8", fontFamily: sans, fontWeight: "300", marginBottom: "48px" }}>
+            This is the name they will use. The name you will hear.
+            It belongs to you — not the platform.
+          </p>
+
+          <input
+            type="text"
+            placeholder={companion?.sub}
+            value={companionName}
+            onChange={e => setCompanionName(e.target.value)}
+            autoFocus
+            onKeyDown={e => e.key === "Enter" && setStep("account")}
+            style={{
+              width: "100%", background: "transparent",
+              border: "none", borderBottom: `1px solid ${companion?.color}40`,
+              color: text, fontSize: "clamp(28px, 4vw, 48px)",
+              fontFamily: serif, fontWeight: "300", textAlign: "center",
+              padding: "12px 0", outline: "none", marginBottom: "48px",
+              letterSpacing: "0.04em",
+            }}
+          />
+
+          <div style={{ display: "flex", gap: "16px", justifyContent: "center", alignItems: "center" }}>
+            <button onClick={() => setStep("choose")} style={{
+              background: "none", border: "0.5px solid rgba(235,229,220,0.12)",
+              color: "rgba(235,229,220,0.3)", padding: "14px 28px", cursor: "pointer",
+              fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans,
+            }}>
+              ← Back
+            </button>
+            <button onClick={() => setStep("account")} style={{
+              background: companion?.color, color: bg,
+              border: "none", padding: "14px 40px", cursor: "pointer",
+              fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans,
+            }}>
+              {companionName ? `Continue with ${companionName}` : "Continue"} →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── STEP: ACCOUNT ──
+  if (step === "account") {
+    return (
+      <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px" }}>
+        <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: "420px", width: "100%" }}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: companion?.color, marginBottom: "32px", fontFamily: sans }}>
+            Step three · Almost there
+          </div>
+          <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: "300", color: text, lineHeight: "1.1", marginBottom: "12px" }}>
+            Who are you?
+          </h2>
+          <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", lineHeight: "1.8", fontFamily: sans, fontWeight: "300", marginBottom: "40px" }}>
+            {companionName || companion?.sub} is ready. We just need to know who they are walking beside.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "0", marginBottom: "32px", textAlign: "left" }}>
+            {[
+              { label: "Your name", value: userName, setter: setUserName, type: "text", placeholder: "What should we call you?" },
+              { label: "Email address", value: email, setter: setEmail, type: "email", placeholder: "your@email.com" },
+              { label: "Password", value: password, setter: setPassword, type: "password", placeholder: "At least 6 characters" },
+            ].map((field, i) => (
+              <div key={i} style={{ borderBottom: "0.5px solid rgba(201,168,76,0.12)", paddingBottom: "4px", marginBottom: "28px" }}>
+                <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "8px", fontFamily: sans }}>
+                  {field.label}
+                </div>
+                <input
+                  type={field.type}
+                  placeholder={field.placeholder}
+                  value={field.value}
+                  onChange={e => field.setter(e.target.value)}
+                  style={{
+                    width: "100%", background: "transparent", border: "none",
+                    color: text, fontSize: "16px", fontFamily: sans, fontWeight: "300",
+                    padding: "4px 0", outline: "none",
+                  }}
+                />
               </div>
             ))}
           </div>
 
-          {/* STEP 1 — Account */}
-          {step === "account" && (
-            <>
-              <h1 className="text-2xl font-bold mb-1">Create your account</h1>
-              <p className="text-muted-foreground text-sm mb-6">Step 1 of 3 — Account details</p>
-              <form onSubmit={handleAccountStep} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
-                  <Input id="email" type="email" placeholder="you@example.com" value={form.email} onChange={(e) => update("email", e.target.value)} required className="bg-background" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
-                    <Input id="password" type={showPassword ? "text" : "password"} placeholder="At least 6 characters" value={form.password} onChange={(e) => update("password", e.target.value)} required className="bg-background pr-10" />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="w-full rounded-full" size="lg">
-                  Continue <ArrowRight className="ml-2 w-4 h-4" />
-                </Button>
-              </form>
-            </>
+          {error && (
+            <p style={{ fontSize: "12px", color: "#B07070", fontFamily: sans, marginBottom: "16px", textAlign: "center" }}>
+              {error}
+            </p>
           )}
 
-          {/* STEP 2 — Companion */}
-          {step === "companion" && (
-            <>
-              <h1 className="text-2xl font-bold mb-1">Who guides you?</h1>
-              <p className="text-muted-foreground text-sm mb-6">
-                Step 2 of 3 — Choose who stands beside you in this journey
-              </p>
-              <form onSubmit={handleCompanionStep} className="space-y-5">
-                <div className="grid grid-cols-3 gap-2">
-                  {COMPANIONS.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => { setSelectedCompanion(c.id); setCompanionName(""); setError(null); }}
-                      className={`p-3 rounded-xl border-2 text-center transition-all duration-150 ${
-                        selectedCompanion === c.id
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:border-primary/40 hover:bg-primary/5"
-                      }`}
-                    >
-                      <div className="text-2xl mb-1">{c.emoji}</div>
-                      <div className="text-xs font-medium leading-tight">{c.label}</div>
-                    </button>
-                  ))}
-                </div>
+          <div style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
+            <button onClick={() => setStep("name")} style={{
+              background: "none", border: "0.5px solid rgba(235,229,220,0.12)",
+              color: "rgba(235,229,220,0.3)", padding: "14px 28px", cursor: "pointer",
+              fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans,
+            }}>
+              ← Back
+            </button>
+            <button onClick={handleSignup} disabled={loading} style={{
+              background: loading ? "rgba(201,168,76,0.5)" : companion?.color,
+              color: bg, border: "none", padding: "14px 40px",
+              cursor: loading ? "not-allowed" : "pointer",
+              fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans,
+              transition: "background 0.3s",
+            }}>
+              {loading ? "Creating..." : `Meet ${companionName || companion?.sub} →`}
+            </button>
+          </div>
 
-                {selectedCompanion && (
-                  <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                    <Label htmlFor="companionName">
-                      {companion?.prompt}
-                    </Label>
-                    <Input
-                      id="companionName"
-                      placeholder={`Enter ${companion?.id === "self" ? "your" : "their"} name...`}
-                      value={companionName}
-                      onChange={(e) => setCompanionName(e.target.value)}
-                      className="bg-background"
-                      autoFocus
-                    />
-                    {companionName && (
-                      <p className="text-xs text-primary flex items-center gap-1">
-                        <Heart className="w-3 h-3" />
-                        {companion?.id === "self"
-                          ? `You've got this, ${companionName}.`
-                          : `${companionName} will be proud of you.`}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-
-                <div className="flex gap-3">
-                  <Button type="button" variant="outline" onClick={() => { setStep("account"); setError(null); }} className="rounded-full">
-                    ← Back
-                  </Button>
-                  <Button type="submit" className="flex-1 rounded-full" size="lg">
-                    Continue <ArrowRight className="ml-2 w-4 h-4" />
-                  </Button>
-                </div>
-              </form>
-            </>
-          )}
-
-          {/* STEP 3 — Profile */}
-          {step === "profile" && (
-            <>
-              <h1 className="text-2xl font-bold mb-1">
-                {companion?.id === "self" ? `Tell us about yourself, ${companionName}` : `Tell ${companionName} about yourself`}
-              </h1>
-              <p className="text-muted-foreground text-sm mb-6">Step 3 of 3 — So we can personalise everything for you</p>
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Your full name</Label>
-                  <Input id="fullName" placeholder="Your full name" value={form.fullName} onChange={(e) => update("fullName", e.target.value)} required className="bg-background" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="age">Age</Label>
-                    <Input id="age" type="number" placeholder="e.g. 24" value={form.age} onChange={(e) => update("age", e.target.value)} className="bg-background" min="16" max="80" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="country">Country</Label>
-                    <Input id="country" placeholder="e.g. United Kingdom" value={form.country} onChange={(e) => update("country", e.target.value)} required className="bg-background" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="situation">Current situation</Label>
-                  <select id="situation" value={form.situation} onChange={(e) => update("situation", e.target.value)} required className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                    <option value="">Select your situation...</option>
-                    <option value="student">Student</option>
-                    <option value="fresh_graduate">Fresh Graduate (no experience)</option>
-                    <option value="job_seeker">Job Seeker (have some experience)</option>
-                    <option value="employed_looking">Employed but looking to switch</option>
-                    <option value="career_change">Career changer</option>
-                    <option value="returning">Returning to work</option>
-                  </select>
-                </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="w-full rounded-full" size="lg" disabled={loading}>
-                  {loading ? (
-                    <><Loader2 className="mr-2 w-4 h-4 animate-spin" />Creating your account...</>
-                  ) : (
-                    <>Begin your journey <ArrowRight className="ml-2 w-4 h-4" /></>
-                  )}
-                </Button>
-                <button type="button" onClick={() => { setStep("companion"); setError(null); }} className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  ← Back
-                </button>
-              </form>
-            </>
-          )}
-
-          <p className="text-center text-sm text-muted-foreground mt-6">
+          <p style={{ marginTop: "28px", fontSize: "11px", color: "rgba(235,229,220,0.2)", fontFamily: sans, textAlign: "center" }}>
             Already have an account?{" "}
-            <Link href="/login" className="text-primary hover:underline font-medium">Sign in</Link>
+            <Link href="/login" style={{ color: companion?.color, textDecoration: "none" }}>Sign in →</Link>
           </p>
         </div>
+      </div>
+    );
+  }
+
+  // ── STEP: MEETING ──
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#030202",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      padding: "40px", textAlign: "center",
+      position: "relative", overflow: "hidden",
+    }}>
+      {/* Ambient glow */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+        width: "500px", height: "400px",
+        background: `radial-gradient(ellipse, ${companion?.color}18 0%, transparent 70%)`,
+        pointerEvents: "none",
+      }} />
+
+      {/* Ghost name watermark */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%",
+        transform: "translate(-50%,-50%)",
+        fontSize: "clamp(100px, 18vw, 220px)", fontWeight: "700",
+        color: `${companion?.color}06`, letterSpacing: "-0.04em",
+        whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none",
+        lineHeight: "1", fontFamily: serif,
+      }}>
+        {companionName || companion?.sub}
+      </div>
+
+      <div style={{ position: "relative", zIndex: 1, maxWidth: "560px" }}>
+        <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: `${companion?.color}80`, marginBottom: "40px", fontFamily: sans }}>
+          {companion?.label}
+        </div>
+
+        <div style={{
+          fontSize: "clamp(48px, 8vw, 96px)", fontWeight: "200",
+          color: companion?.color, letterSpacing: "-0.03em",
+          lineHeight: "1", marginBottom: "32px",
+        }}>
+          {companionName || companion?.sub}
+        </div>
+
+        <p style={{
+          fontSize: "clamp(16px, 2vw, 20px)", color: "rgba(235,229,220,0.55)",
+          lineHeight: "1.7", fontStyle: "italic", marginBottom: "52px",
+          fontFamily: serif,
+        }}>
+          "{companion?.greeting(companionName, userName || "Hey")}"
+        </p>
+
+        <div style={{ width: "40px", height: "0.5px", background: companion?.color, margin: "0 auto 40px", opacity: 0.4 }} />
+
+        <Link href="/dashboard" style={{
+          display: "inline-flex", alignItems: "center", gap: "14px",
+          background: companion?.color, color: bg,
+          padding: "18px 48px", textDecoration: "none",
+          fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans,
+        }}>
+          Begin the journey →
+        </Link>
+
+        <p style={{ marginTop: "24px", fontSize: "11px", color: "rgba(235,229,220,0.2)", fontFamily: sans, letterSpacing: "0.08em" }}>
+          {companionName || companion?.sub} will remember everything from here.
+        </p>
       </div>
     </div>
   );
