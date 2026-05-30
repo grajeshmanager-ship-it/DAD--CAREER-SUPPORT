@@ -1,174 +1,123 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  ArrowRight, ArrowLeft, Mic, MicOff,
-  CheckCircle, XCircle, AlertCircle, ChevronDown,
-  ChevronUp, RotateCcw, FileText, Brain, Target,
-  TrendingUp, BookOpen, Star, Upload
-} from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import DadLoading from "@/components/ui/dad-loading";
+import { createClient } from "@supabase/supabase-js";
 
-type Stage = "setup" | "intel" | "interview" | "debrief";
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-interface InterviewPlan {
+interface Question {
+  id: string;
+  question: string;
+  type: string;
+  why: string;
+  tips: string;
+}
+
+interface Prep {
   roleTitle: string;
   company: string;
-  seniorityLevel: string;
-  interviewStyle: string;
-  numberOfQuestions: number;
-  keySkillsRequired: string[];
-  topThingsToGetHired: string[];
-  topThingsToGetRejected: string[];
-  interviewQuestions: {
-    id: number;
-    type: string;
-    question: string;
-    whatTheyAreTesting: string;
-    idealAnswerPoints: string[];
-  }[];
-  intelSummary: string;
+  roleAnalysis: string;
+  whatGetsYouHired: string[];
+  whatGetsYouRejected: string[];
+  keySkills: { skill: string; importance: string }[];
+  questions: Question[];
+  cheatSheet: string[];
 }
 
 interface Debrief {
   overallScore: number;
   verdict: string;
-  verdictExplanation: string;
   strengths: string[];
   weaknesses: string[];
-  questionBreakdown: {
-    questionNumber: number;
-    question: string;
-    candidateAnswer: string;
-    score: number;
-    whatWasWrong: string;
-    idealAnswer: string;
-    tip: string;
-  }[];
-  top3ImprovementAreas: {
-    area: string;
-    why: string;
-    howToImprove: string;
-  }[];
-  cheatSheet: {
-    title: string;
-    keyMessages: string[];
-    questionsToAskInterviewer: string[];
-    lastMinuteTips: string[];
-  };
+  questionBreakdown: { question: string; score: number; whatTheyDid: string; idealAnswer: string; tip: string }[];
+  top3Improvements: { area: string; why: string; howToImprove: string }[];
+  cheatSheet: string[];
   encouragement: string;
 }
 
-function ScoreRing({ score }: { score: number }) {
-  const color = score >= 75 ? "text-green-400" : score >= 60 ? "text-yellow-400" : "text-red-400";
-  const bgColor = score >= 75 ? "bg-green-400/10" : score >= 60 ? "bg-yellow-400/10" : "bg-red-400/10";
-  const borderColor = score >= 75 ? "border-green-400" : score >= 60 ? "border-yellow-400" : "border-red-400";
-  return (
-    <div className={`w-32 h-32 rounded-full ${bgColor} border-4 ${borderColor} flex items-center justify-center flex-col mx-auto`}>
-      <span className={`text-4xl font-bold ${color}`}>{score}</span>
-      <span className="text-xs text-muted-foreground">/ 100</span>
-    </div>
-  );
-}
+type Stage = "input" | "intel" | "interview" | "debrief";
 
 export default function InterviewPage() {
-  const [stage, setStage] = useState<Stage>("setup");
-  const [jobDescription, setJobDescription] = useState("");
-  const [resumeText, setResumeText] = useState("");
-  const [resumeFileName, setResumeFileName] = useState("");
-  const [resumeLoading, setResumeLoading] = useState(false);
-  const [plan, setPlan] = useState<InterviewPlan | null>(null);
-  const [answers, setAnswers] = useState<string[]>([]);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [currentAnswer, setCurrentAnswer] = useState("");
+  const [stage, setStage] = useState<Stage>("input");
+  const [jd, setJd] = useState("");
+  const [prep, setPrep] = useState<Prep | null>(null);
   const [debrief, setDebrief] = useState<Debrief | null>(null);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [currentQ, setCurrentQ] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [recognition, setRecognition] = useState<any>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const hasSpoken = useRef(false);
 
-  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setResumeLoading(true);
-    setResumeFileName(file.name);
-    try {
-      if (file.type === "application/pdf") {
-        const formData = new FormData();
-        formData.append("resume", file);
-        const res = await fetch("/api/analyze-resume", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.analysis?.resumeText) {
-          setResumeText(data.analysis.resumeText);
-        } else {
-          setError("Could not extract text from PDF. Please paste your resume below instead.");
-        }
-      } else {
-        const text = await file.text();
-        setResumeText(text);
-      }
-    } catch {
-      setError("Could not read the file. Please paste your resume below instead.");
-    } finally {
-      setResumeLoading(false);
-    }
-  };
+  const sans = "'Helvetica Neue', Arial, sans-serif";
+  const serif = "'Georgia', 'Times New Roman', serif";
+  const gold = "#C9A84C";
+  const bg = "#070606";
+  const dark = "#040303";
+  const text = "#EBE5DC";
+  const blue = "#6B8CFF";
 
-  const startVoiceInput = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    const SpeechRecognitionAPI = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      setError("Voice input not supported in this browser. Please type your answer.");
-      return;
-    }
-    const rec = new SpeechRecognitionAPI();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "en-GB";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (event: any) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setCurrentAnswer(transcript);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthToken(data.session?.access_token ?? null);
+    });
+  }, []);
+
+  // Voice on load — once per session
+  useEffect(() => {
+    if (hasSpoken.current || sessionStorage.getItem("dad_interview_voiced")) return;
+    hasSpoken.current = true;
+    sessionStorage.setItem("dad_interview_voiced", "1");
+
+    const speak = () => {
+      if (!window.speechSynthesis) return;
+      const utter = new SpeechSynthesisUtterance(
+        "Every great answer was once a terrible one. The difference is practice. Let's begin."
+      );
+      utter.rate = 0.80;
+      utter.pitch = 0.87;
+      utter.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find(v => v.name.includes("Daniel")) ||
+        voices.find(v => v.name.includes("Arthur")) ||
+        voices.find(v => v.lang === "en-GB") ||
+        voices.find(v => v.lang.startsWith("en")) ||
+        voices[0];
+      if (preferred) utter.voice = preferred;
+      window.speechSynthesis.speak(utter);
     };
-    rec.onerror = () => setIsRecording(false);
-    rec.onend = () => setIsRecording(false);
-    rec.start();
-    setRecognition(rec);
-    setIsRecording(true);
-  };
 
-  const stopVoiceInput = () => {
-    if (recognition) recognition.stop();
-    setIsRecording(false);
-  };
+    if (window.speechSynthesis.getVoices().length > 0) {
+      setTimeout(speak, 800);
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 800);
+    }
+  }, []);
 
   const handlePrepare = async () => {
-    if (jobDescription.trim().length < 20) {
-      setError("Please paste a proper job description.");
+    if (!jd.trim() || jd.trim().length < 50) {
+      setError("Please paste the full job description — at least 50 characters.");
       return;
     }
     setLoading(true);
     setError(null);
     try {
+      const formData = new FormData();
+      formData.append("jobDescription", jd);
       const res = await fetch("/api/prepare-interview", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobDescription, resumeText }),
+        headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+        body: formData,
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to prepare interview");
-      setPlan(data.plan);
-      setAnswers(new Array(data.plan.interviewQuestions.length).fill(""));
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to prepare interview");
+      setPrep(data.prep);
+      setAnswers(new Array(data.prep.questions.length).fill(""));
       setStage("intel");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -177,39 +126,21 @@ export default function InterviewPage() {
     }
   };
 
-  const handleNextQuestion = () => {
-    if (!currentAnswer.trim()) {
-      setError("Please answer the question before continuing.");
-      return;
-    }
-    const newAnswers = [...answers];
-    newAnswers[currentQuestion] = currentAnswer;
-    setAnswers(newAnswers);
-    setCurrentAnswer("");
-    setError(null);
-    if (currentQuestion < (plan?.interviewQuestions.length || 0) - 1) {
-      setCurrentQuestion(currentQuestion + 1);
-    } else {
-      handleDebrief(newAnswers);
-    }
-  };
-
-  const handleDebrief = async (finalAnswers: string[]) => {
+  const handleDebrief = async () => {
+    if (!prep) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/debrief-interview", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questions: plan?.interviewQuestions,
-          answers: finalAnswers,
-          roleTitle: plan?.roleTitle,
-          jobDescription,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ questions: prep.questions, answers, roleTitle: prep.roleTitle }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to generate debrief");
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to generate debrief");
       setDebrief(data.debrief);
       setStage("debrief");
     } catch (err) {
@@ -219,383 +150,107 @@ export default function InterviewPage() {
     }
   };
 
-  const handleReset = () => {
-    setStage("setup");
-    setJobDescription("");
-    setResumeText("");
-    setResumeFileName("");
-    setPlan(null);
-    setAnswers([]);
-    setCurrentQuestion(0);
-    setCurrentAnswer("");
-    setDebrief(null);
-    setError(null);
-  };
-
-  if (loading) return <DadLoading />;
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: dark, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px" }}>
+        <div style={{ fontSize: "clamp(60px, 10vw, 120px)", fontWeight: "700", color: "rgba(107,140,255,0.06)", letterSpacing: "-0.04em", fontFamily: serif, userSelect: "none" }}>DAD</div>
+        <div style={{ fontSize: "11px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(107,140,255,0.5)", fontFamily: sans }}>
+          {stage === "input" ? "Analysing the role..." : "Evaluating your performance..."}
+        </div>
+        <div style={{ width: "120px", height: "0.5px", background: "rgba(107,140,255,0.1)", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: "40%", background: blue, animation: "slide 1.4s ease-in-out infinite" }} />
+        </div>
+        <style>{`@keyframes slide { 0%{left:-40%} 100%{left:140%} }`}</style>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container px-4 md:px-6 max-w-4xl mx-auto flex items-center justify-between h-16">
-          <Link href="/dashboard" className="text-2xl font-bold text-primary">DAD</Link>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Brain className="w-4 h-4" />
-            <span>Mock Interview</span>
-          </div>
-        </div>
+    <div style={{ minHeight: "100vh", background: stage === "interview" || stage === "intel" ? dark : bg, color: text, fontFamily: serif }}>
+
+      {/* Nav */}
+      <nav style={{ padding: "18px 52px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `0.5px solid ${stage === "interview" || stage === "intel" ? "rgba(107,140,255,0.1)" : "rgba(201,168,76,0.08)"}`, position: "sticky", top: 0, zIndex: 100, background: stage === "interview" || stage === "intel" ? "rgba(4,3,3,0.97)" : "rgba(7,6,6,0.97)" }}>
+        <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: stage === "interview" || stage === "intel" ? blue : gold, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
+        <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", fontFamily: sans }}>Interview Mode</div>
+        <Link href="/dashboard" style={{ fontSize: "11px", color: "rgba(235,229,220,0.25)", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>← Dashboard</Link>
       </nav>
 
-      <main className="container px-4 md:px-6 max-w-4xl mx-auto py-10">
-
-        {/* SETUP */}
-        {stage === "setup" && (
-          <div className="space-y-8">
-            <div className="text-center">
-              <h1 className="text-3xl md:text-4xl font-bold mb-3">Mock Interview with DAD</h1>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Paste the job description. DAD will analyse it, ask you real interview questions, then give you honest feedback and a preparation guide.
-              </p>
-            </div>
-            <Card className="p-6 border border-border bg-card/50">
-              <label className="block text-sm font-medium mb-2">
-                Job Description <span className="text-primary">*</span>
-              </label>
-              <Textarea
-                placeholder="Paste the full job description here..."
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                className="min-h-[200px] bg-background resize-none mb-6"
-              />
-
-              <label className="block text-sm font-medium mb-3">
-                Your Resume <span className="text-muted-foreground text-xs">(optional but recommended — helps DAD personalise the questions)</span>
-              </label>
-
-              <div
-                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-200 mb-3 ${
-                  resumeText && resumeFileName
-                    ? "border-green-500/50 bg-green-500/5"
-                    : "border-border hover:border-primary/50 hover:bg-primary/5"
-                }`}
-                onClick={() => document.getElementById("resume-upload-interview")?.click()}
-              >
-                <input
-                  id="resume-upload-interview"
-                  type="file"
-                  accept=".pdf,.txt,.doc,.docx"
-                  className="hidden"
-                  onChange={handleResumeUpload}
-                />
-                {resumeLoading ? (
-                  <div className="space-y-2">
-                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-sm text-muted-foreground">Reading your resume...</p>
-                  </div>
-                ) : resumeText && resumeFileName ? (
-                  <div className="space-y-1">
-                    <CheckCircle className="w-8 h-8 text-green-400 mx-auto" />
-                    <p className="text-sm font-medium text-green-400">Resume loaded!</p>
-                    <p className="text-xs text-muted-foreground">{resumeFileName}</p>
-                    <p className="text-xs text-muted-foreground">Click to upload a different file</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Upload className="w-8 h-8 text-muted-foreground mx-auto" />
-                    <p className="text-sm font-medium">Click to upload your resume</p>
-                    <p className="text-xs text-muted-foreground">PDF, TXT, DOC, DOCX supported</p>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-center text-muted-foreground mb-3">— or paste it below —</p>
-
-              <Textarea
-                placeholder="Paste your resume text here..."
-                value={resumeText}
-                onChange={(e) => {
-                  setResumeText(e.target.value);
-                  if (resumeFileName) setResumeFileName("");
-                }}
-                className="min-h-[100px] bg-background resize-none"
-              />
-
-              {error && <p className="text-sm text-destructive mt-3">{error}</p>}
-
-              <Button
-                onClick={handlePrepare}
-                className="w-full mt-4 rounded-full"
-                size="lg"
-                disabled={jobDescription.trim().length < 20}
-              >
-                Analyse & Prepare My Interview
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </Card>
+      {/* ── STAGE: INPUT ── */}
+      {stage === "input" && (
+        <div style={{ maxWidth: "800px", margin: "0 auto", padding: "80px 52px" }}>
+          <div style={{ marginBottom: "64px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.26em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "18px", fontFamily: sans }}>Interview Mode</div>
+            <h1 style={{ fontSize: "clamp(32px, 5vw, 60px)", fontWeight: "300", color: text, lineHeight: "1.1", marginBottom: "20px", letterSpacing: "-0.02em" }}>
+              Paste the job description.<br />
+              <span style={{ color: "rgba(235,229,220,0.4)" }}>DAD does the rest.</span>
+            </h1>
+            <p style={{ fontSize: "15px", color: "rgba(235,229,220,0.4)", lineHeight: "1.9", fontFamily: sans, fontWeight: "300", maxWidth: "480px", margin: 0 }}>
+              No configuration. No setup. Paste the JD and your companion reads it,
+              selects the right interviewer, builds the questions, and puts you in the chair.
+              The companion disappears. The evaluation begins.
+            </p>
           </div>
-        )}
 
-        {/* INTEL */}
-        {stage === "intel" && plan && (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <p className="text-primary font-medium text-sm uppercase tracking-wide mb-2">Intel Report</p>
-              <h1 className="text-3xl font-bold mb-2">{plan.roleTitle}</h1>
-              <p className="text-muted-foreground">{plan.company} · {plan.seniorityLevel} · {plan.interviewStyle}</p>
-            </div>
-            <Card className="p-5 border border-primary/20 bg-primary/5">
-              <p className="text-sm leading-relaxed">{plan.intelSummary}</p>
-            </Card>
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card className="p-5 border border-green-500/20 bg-green-500/5">
-                <h3 className="font-semibold text-green-400 flex items-center gap-2 mb-3">
-                  <CheckCircle className="w-4 h-4" /> What will get you hired
-                </h3>
-                <ul className="space-y-2">
-                  {plan.topThingsToGetHired.map((t, i) => (
-                    <li key={i} className="text-sm flex gap-2"><span className="text-green-400 mt-0.5">•</span>{t}</li>
-                  ))}
-                </ul>
-              </Card>
-              <Card className="p-5 border border-red-500/20 bg-red-500/5">
-                <h3 className="font-semibold text-red-400 flex items-center gap-2 mb-3">
-                  <XCircle className="w-4 h-4" /> What will get you rejected
-                </h3>
-                <ul className="space-y-2">
-                  {plan.topThingsToGetRejected.map((t, i) => (
-                    <li key={i} className="text-sm flex gap-2"><span className="text-red-400 mt-0.5">•</span>{t}</li>
-                  ))}
-                </ul>
-              </Card>
-            </div>
-            <Card className="p-5 border border-border bg-card/50">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Target className="w-4 h-4 text-primary" /> Key skills being assessed
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {plan.keySkillsRequired.map((s, i) => (
-                  <span key={i} className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-full px-3 py-1">{s}</span>
-                ))}
-              </div>
-            </Card>
-            <Card className="p-5 border border-border bg-card/50">
-              <h3 className="font-semibold mb-1">Ready for your interview?</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                DAD has prepared {plan.numberOfQuestions} questions. Answer honestly — the more real your answers, the more useful the feedback.
-              </p>
-              <Button onClick={() => { setStage("interview"); setCurrentQuestion(0); }} className="w-full rounded-full" size="lg">
-                Start Interview <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </Card>
+          <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.15)", marginBottom: "40px", paddingBottom: "4px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "12px", fontFamily: sans }}>Job description</div>
+            <textarea
+              placeholder="Paste the full job description here..."
+              value={jd}
+              onChange={e => setJd(e.target.value)}
+              rows={12}
+              style={{ width: "100%", background: "transparent", border: "none", color: text, fontSize: "14px", fontFamily: sans, fontWeight: "300", padding: "4px 0", outline: "none", resize: "none", lineHeight: "1.8" }}
+            />
           </div>
-        )}
 
-        {/* INTERVIEW */}
-        {stage === "interview" && plan && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Question {currentQuestion + 1} of {plan.interviewQuestions.length}</span>
-              <span className="text-sm text-muted-foreground">{plan.roleTitle}</span>
-            </div>
-            <div className="w-full bg-border rounded-full h-1.5 mb-6">
-              <div
-                className="bg-primary h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${((currentQuestion) / plan.interviewQuestions.length) * 100}%` }}
-              />
-            </div>
-            <Card className="p-6 border border-border bg-card">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-xs bg-secondary text-secondary-foreground rounded-full px-3 py-1">
-                  {plan.interviewQuestions[currentQuestion].type}
-                </span>
-              </div>
-              <h2 className="text-xl font-semibold leading-relaxed mb-2">
-                {plan.interviewQuestions[currentQuestion].question}
-              </h2>
-              <p className="text-xs text-muted-foreground italic">
-                Testing: {plan.interviewQuestions[currentQuestion].whatTheyAreTesting}
-              </p>
-            </Card>
-            <Card className="p-6 border border-border bg-card/50">
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-sm font-medium">Your answer</label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={isRecording ? stopVoiceInput : startVoiceInput}
-                  className={isRecording ? "text-red-400 hover:text-red-300" : "text-muted-foreground"}
-                >
-                  {isRecording ? <><MicOff className="w-4 h-4 mr-1" />Stop</> : <><Mic className="w-4 h-4 mr-1" />Speak</>}
-                </Button>
-              </div>
-              <Textarea
-                placeholder="Type your answer or click Speak to use your microphone..."
-                value={currentAnswer}
-                onChange={(e) => setCurrentAnswer(e.target.value)}
-                className="min-h-[160px] bg-background resize-none"
-              />
-              {isRecording && (
-                <p className="text-xs text-red-400 mt-2 animate-pulse">🔴 Recording... speak your answer</p>
-              )}
-            </Card>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <div className="flex gap-3">
-              {currentQuestion > 0 && (
-                <Button variant="outline" onClick={() => { setCurrentQuestion(currentQuestion - 1); setCurrentAnswer(answers[currentQuestion - 1] || ""); }} className="rounded-full">
-                  <ArrowLeft className="w-4 h-4 mr-2" /> Back
-                </Button>
-              )}
-              <Button onClick={handleNextQuestion} className="flex-1 rounded-full" size="lg">
-                {currentQuestion === plan.interviewQuestions.length - 1 ? "Finish & Get Feedback" : "Next Question"}
-                <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </div>
+          {error && <p style={{ fontSize: "12px", color: "#B07070", fontFamily: sans, marginBottom: "20px" }}>{error}</p>}
+
+          <button onClick={handlePrepare} disabled={jd.trim().length < 50} style={{ width: "100%", background: jd.trim().length >= 50 ? gold : "rgba(201,168,76,0.15)", color: jd.trim().length >= 50 ? bg : "rgba(235,229,220,0.2)", border: "none", padding: "20px", cursor: jd.trim().length >= 50 ? "pointer" : "not-allowed", fontSize: "11px", letterSpacing: "0.18em", textTransform: "uppercase", fontFamily: sans, transition: "all 0.3s" }}>
+            Enter the room →
+          </button>
+        </div>
+      )}
+
+      {/* ── STAGE: INTEL ── */}
+      {stage === "intel" && prep && (
+        <div style={{ maxWidth: "900px", margin: "0 auto", padding: "60px 52px" }}>
+          <div style={{ marginBottom: "48px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.24em", textTransform: "uppercase", color: `${blue}80`, marginBottom: "16px", fontFamily: sans }}>Intelligence report</div>
+            <h2 style={{ fontSize: "clamp(24px, 4vw, 44px)", fontWeight: "300", color: text, lineHeight: "1.1", marginBottom: "12px" }}>{prep.roleTitle}</h2>
+            <div style={{ fontSize: "13px", color: "rgba(235,229,220,0.35)", fontFamily: sans }}>{prep.company}</div>
           </div>
-        )}
 
-        {/* DEBRIEF */}
-        {stage === "debrief" && debrief && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <p className="text-primary font-medium text-sm uppercase tracking-wide mb-4">Interview Complete</p>
-              <ScoreRing score={debrief.overallScore} />
-              <h2 className="text-2xl font-bold mt-4 mb-2">{debrief.verdict}</h2>
-              <p className="text-muted-foreground max-w-xl mx-auto">{debrief.verdictExplanation}</p>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card className="p-5 border border-green-500/20 bg-green-500/5">
-                <h3 className="font-semibold text-green-400 flex items-center gap-2 mb-3">
-                  <CheckCircle className="w-4 h-4" /> Your strengths
-                </h3>
-                <ul className="space-y-2">
-                  {debrief.strengths.map((s, i) => (
-                    <li key={i} className="text-sm flex gap-2"><span className="text-green-400">•</span>{s}</li>
-                  ))}
-                </ul>
-              </Card>
-              <Card className="p-5 border border-red-500/20 bg-red-500/5">
-                <h3 className="font-semibold text-red-400 flex items-center gap-2 mb-3">
-                  <AlertCircle className="w-4 h-4" /> Areas that hurt you
-                </h3>
-                <ul className="space-y-2">
-                  {debrief.weaknesses.map((w, i) => (
-                    <li key={i} className="text-sm flex gap-2"><span className="text-red-400">•</span>{w}</li>
-                  ))}
-                </ul>
-              </Card>
-            </div>
-            <div>
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" /> Question by Question
-              </h3>
-              <div className="space-y-3">
-                {debrief.questionBreakdown.map((q, i) => (
-                  <Card key={i} className="border border-border bg-card/50 overflow-hidden">
-                    <button
-                      className="w-full p-4 flex items-center justify-between text-left hover:bg-card transition-colors"
-                      onClick={() => setExpandedQuestion(expandedQuestion === i ? null : i)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                          q.score >= 75 ? "bg-green-500/20 text-green-400" :
-                          q.score >= 60 ? "bg-yellow-500/20 text-yellow-400" :
-                          "bg-red-500/20 text-red-400"
-                        }`}>{q.score}</span>
-                        <span className="text-sm font-medium line-clamp-1">{q.question}</span>
-                      </div>
-                      {expandedQuestion === i ? <ChevronUp className="w-4 h-4 flex-shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 flex-shrink-0 text-muted-foreground" />}
-                    </button>
-                    {expandedQuestion === i && (
-                      <div className="px-4 pb-4 space-y-3 border-t border-border pt-4">
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">YOUR ANSWER</p>
-                          <p className="text-sm bg-secondary/50 rounded-lg p-3">{answers[i] || "No answer given"}</p>
-                        </div>
-                        {q.whatWasWrong && (
-                          <div>
-                            <p className="text-xs font-medium text-red-400 mb-1">WHAT WAS WEAK</p>
-                            <p className="text-sm text-red-300/80">{q.whatWasWrong}</p>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs font-medium text-green-400 mb-1">IDEAL ANSWER</p>
-                          <p className="text-sm text-green-300/80">{q.idealAnswer}</p>
-                        </div>
-                        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-                          <p className="text-xs font-medium text-primary mb-1">DAD'S TIP</p>
-                          <p className="text-sm">{q.tip}</p>
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" /> Top 3 things to work on
-              </h3>
-              <div className="space-y-3">
-                {debrief.top3ImprovementAreas.map((area, i) => (
-                  <Card key={i} className="p-5 border border-border bg-card/50">
-                    <div className="flex gap-3">
-                      <span className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0">{i + 1}</span>
-                      <div>
-                        <h4 className="font-semibold mb-1">{area.area}</h4>
-                        <p className="text-sm text-muted-foreground mb-2">{area.why}</p>
-                        <p className="text-sm bg-secondary/50 rounded-lg p-2">{area.howToImprove}</p>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-            <Card className="p-6 border border-primary/30 bg-primary/5">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-primary" /> {debrief.cheatSheet.title}
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Key messages to land</p>
-                  <ul className="space-y-1">
-                    {debrief.cheatSheet.keyMessages.map((m, i) => (
-                      <li key={i} className="text-sm flex gap-2"><Star className="w-3 h-3 text-primary mt-1 flex-shrink-0" />{m}</li>
-                    ))}
-                  </ul>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1px", background: `rgba(107,140,255,0.08)`, marginBottom: "40px" }}>
+            <div style={{ background: dark, padding: "32px 36px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.18em", textTransform: "uppercase", color: "#5B9E7A", marginBottom: "16px", fontFamily: sans }}>What gets you hired</div>
+              {prep.whatGetsYouHired.map((w, i) => (
+                <div key={i} style={{ fontSize: "13px", color: "rgba(235,229,220,0.5)", fontFamily: sans, marginBottom: "10px", lineHeight: "1.6", display: "flex", gap: "10px" }}>
+                  <span style={{ color: "#5B9E7A", flexShrink: 0 }}>→</span>{w}
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Questions to ask the interviewer</p>
-                  <ul className="space-y-1">
-                    {debrief.cheatSheet.questionsToAskInterviewer.map((q, i) => (
-                      <li key={i} className="text-sm flex gap-2"><span className="text-primary">→</span>{q}</li>
-                    ))}
-                  </ul>
+              ))}
+            </div>
+            <div style={{ background: dark, padding: "32px 36px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.18em", textTransform: "uppercase", color: "#B07070", marginBottom: "16px", fontFamily: sans }}>What gets you rejected</div>
+              {prep.whatGetsYouRejected.map((w, i) => (
+                <div key={i} style={{ fontSize: "13px", color: "rgba(235,229,220,0.5)", fontFamily: sans, marginBottom: "10px", lineHeight: "1.6", display: "flex", gap: "10px" }}>
+                  <span style={{ color: "#B07070", flexShrink: 0 }}>×</span>{w}
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-primary uppercase tracking-wide mb-2">Last minute tips</p>
-                  <ul className="space-y-1">
-                    {debrief.cheatSheet.lastMinuteTips.map((t, i) => (
-                      <li key={i} className="text-sm flex gap-2"><CheckCircle className="w-3 h-3 text-green-400 mt-1 flex-shrink-0" />{t}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-5 border border-border bg-card/50 text-center">
-              <p className="text-muted-foreground italic">"{debrief.encouragement}"</p>
-              <p className="text-sm text-primary mt-2 font-medium">— DAD</p>
-            </Card>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={handleReset} className="flex-1 rounded-full gap-2">
-                <RotateCcw className="w-4 h-4" /> Try Another Interview
-              </Button>
-              <Link href="/dashboard" className="flex-1">
-                <Button className="w-full rounded-full">Back to Dashboard</Button>
-              </Link>
+              ))}
             </div>
           </div>
-        )}
-      </main>
-    </div>
-  );
-}
+
+          <div style={{ marginBottom: "40px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.18em", textTransform: "uppercase", color: `${blue}60`, marginBottom: "16px", fontFamily: sans }}>Role analysis</div>
+            <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.45)", lineHeight: "1.9", fontFamily: sans, fontWeight: "300", margin: 0 }}>{prep.roleAnalysis}</p>
+          </div>
+
+          <button onClick={() => { setCurrentQ(0); setStage("interview"); }} style={{ width: "100%", background: blue, color: "#030202", border: "none", padding: "20px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.18em", textTransform: "uppercase", fontFamily: sans }}>
+            Begin the interview →
+          </button>
+        </div>
+      )}
+
+      {/* ── STAGE: INTERVIEW ── */}
+      {stage === "interview" && prep && (
+        <div style={{ maxWidth: "800px", margin: "0 auto", padding: "60px 52px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "52px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${blue}60`,
