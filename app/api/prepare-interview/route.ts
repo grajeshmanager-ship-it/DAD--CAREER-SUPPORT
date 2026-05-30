@@ -8,15 +8,9 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(request);
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorised", message: "Please log in to use mock interview." },
-        { status: 401 }
-      );
-    }
+    const effectiveUserId = (await getUserIdFromRequest(request)) ?? "anonymous";
 
-    const { allowed, remaining, resetAt } = await checkRateLimit(userId, "prepare-interview");
+    const { allowed, remaining, resetAt } = await checkRateLimit(effectiveUserId, "prepare-interview");
     if (!allowed) {
       return rateLimitResponse(remaining, resetAt);
     }
@@ -25,11 +19,11 @@ export async function POST(request: NextRequest) {
     const jobDescription = formData.get("jobDescription") as string | null;
     const resumeFile = formData.get("resume") as File | null;
 
-    if (!jobDescription || jobDescription.trim().length < 50) {
+    if (!jobDescription || jobDescription.trim().length < 20) {
       return NextResponse.json(
         {
           error: "Job description too short",
-          message: "Please paste the full job description (at least 50 characters).",
+          message: "Please paste the full job description.",
         },
         { status: 400 }
       );
@@ -56,31 +50,42 @@ export async function POST(request: NextRequest) {
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages: [
         {
           role: "user",
-          content: `You are a senior hiring manager. Analyse this job description${resumeText ? " and the candidate's CV" : ""} and prepare an interview intelligence report.
+          content: `You are a senior hiring manager who has interviewed hundreds of candidates. Analyse this job description${resumeText ? " and the candidate's CV" : ""} and prepare a complete interview intelligence report.
 
 Return a JSON object with exactly these fields:
 
 {
   "roleTitle": string,
-  "company": string,
-  "roleAnalysis": string,
-  "whatGetsYouHired": string[],
-  "whatGetsYouRejected": string[],
-  "keySkills": [{ "skill": string, "importance": "critical"|"important"|"nice-to-have" }],
+  "company": string (extract if mentioned, otherwise "the company"),
+  "industry": string,
+  "seniorityLevel": string (e.g. "Junior", "Mid-level", "Senior", "Lead"),
+  "isTechnical": boolean,
+  "roleAnalysis": string (what this role really needs — 2-3 sentences),
+  "interviewerPersona": {
+    "name": string (realistic interviewer name),
+    "title": string (e.g. "Engineering Manager", "HR Director"),
+    "style": string (e.g. "Direct and technical", "Warm but probing")
+  },
+  "whatGetsYouHired": string[] (top 5 things that will impress them),
+  "whatGetsYouRejected": string[] (top 5 red flags),
+  "keySkills": [{ "skill": string, "importance": "critical" | "important" | "nice-to-have" }] (top 8),
   "questions": [
     {
       "id": string,
       "question": string,
-      "type": "behavioural"|"technical"|"situational"|"motivation",
-      "why": string,
-      "tips": string
+      "type": "behavioural" | "technical" | "situational" | "motivation",
+      "difficulty": "easy" | "medium" | "hard",
+      "why": string (why they ask this),
+      "tips": string (how to answer well),
+      "idealAnswerFramework": string (STAR or specific framework to use)
     }
-  ],
-  "cheatSheet": string[]
+  ] (exactly 10 questions — mix of types appropriate for the role),
+  "cheatSheet": string[] (8 bullet points to memorise before walking in),
+  "salaryNegotiationTips": string[] (3 tips specific to this role and level)
 }
 
 Return ONLY valid JSON. No explanation, no markdown, no backticks.
@@ -100,6 +105,7 @@ ${resumeText ? `CANDIDATE CV:\n${resumeText}` : ""}`,
       const clean = responseText.replace(/```json|```/g, "").trim();
       prep = JSON.parse(clean);
     } catch {
+      console.error("[prepare-interview] JSON parse failed:", responseText.slice(0, 300));
       return NextResponse.json(
         { error: "Preparation failed", message: "Something went wrong. Please try again." },
         { status: 500 }
