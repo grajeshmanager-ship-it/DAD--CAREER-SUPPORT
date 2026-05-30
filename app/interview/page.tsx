@@ -253,4 +253,139 @@ export default function InterviewPage() {
       {stage === "interview" && prep && (
         <div style={{ maxWidth: "800px", margin: "0 auto", padding: "60px 52px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "52px" }}>
-            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${blue}60`,
+            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${blue}60`, fontFamily: sans }}>
+              Question {currentQ + 1} of {prep.questions.length}
+            </div>
+            <div style={{ display: "flex", gap: "4px" }}>
+              {prep.questions.map((_, i) => (
+                <div key={i} style={{ width: "24px", height: "2px", background: i <= currentQ ? blue : "rgba(107,140,255,0.15)", transition: "background 0.3s" }} />
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "40px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: `${blue}50`, marginBottom: "20px", fontFamily: sans }}>
+              {prep.questions[currentQ]?.type}
+            </div>
+            <h2 style={{ fontSize: "clamp(20px, 3vw, 32px)", fontWeight: "300", color: text, lineHeight: "1.35", marginBottom: "16px" }}>
+              {prep.questions[currentQ]?.question}
+            </h2>
+            <p style={{ fontSize: "12px", color: "rgba(235,229,220,0.25)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.6" }}>
+              Tip: {prep.questions[currentQ]?.tips}
+            </p>
+          </div>
+
+          <div style={{ borderBottom: `0.5px solid rgba(107,140,255,0.2)`, marginBottom: "36px", paddingBottom: "4px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: `${blue}50`, marginBottom: "12px", fontFamily: sans }}>Your answer</div>
+            <textarea
+              placeholder="Type your answer here..."
+              value={answers[currentQ] || ""}
+              onChange={e => { const newAnswers = [...answers]; newAnswers[currentQ] = e.target.value; setAnswers(newAnswers); }}
+              rows={8}
+              style={{ width: "100%", background: "transparent", border: "none", color: text, fontSize: "14px", fontFamily: sans, fontWeight: "300", padding: "4px 0", outline: "none", resize: "none", lineHeight: "1.8" }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: "12px" }}>
+            {currentQ > 0 && (
+              <button onClick={() => setCurrentQ(q => q - 1)} style={{ border: `0.5px solid rgba(107,140,255,0.2)`, background: "none", color: `${blue}60`, padding: "16px 28px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
+                ← Back
+              </button>
+            )}
+            {currentQ < prep.questions.length - 1 ? (
+              <button onClick={() => setCurrentQ(q => q + 1)} style={{ flex: 1, background: blue, color: "#030202", border: "none", padding: "16px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
+                Next question →
+              </button>
+            ) : (
+              <button onClick={handleDebrief} style={{ flex: 1, background: gold, color: bg, border: "none", padding: "16px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
+                Get my debrief →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── STAGE: DEBRIEF ── */}
+      {stage === "debrief" && debrief && (
+        <div style={{ maxWidth: "900px", margin: "0 auto", padding: "60px 52px" }}>
+          <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "48px", marginBottom: "48px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "16px", fontFamily: sans }}>Interview debrief</div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "20px", marginBottom: "16px" }}>
+              <div style={{ fontSize: "clamp(64px, 10vw, 96px)", fontWeight: "200", color: debrief.overallScore >= 70 ? "#5B9E7A" : debrief.overallScore >= 50 ? gold : "#B07070", lineHeight: "1" }}>
+                {debrief.overallScore}
+              </div>
+              <div style={{ fontSize: "20px", color: "rgba(235,229,220,0.2)", marginBottom: "12px" }}>/100</div>
+            </div>
+            <p style={{ fontSize: "16px", color: "rgba(235,229,220,0.55)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", margin: 0 }}>{debrief.verdict}</p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.07)", marginBottom: "48px" }}>
+            <div style={{ background: bg, padding: "32px 36px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.18em", textTransform: "uppercase", color: "#5B9E7A", marginBottom: "16px", fontFamily: sans }}>Strengths</div>
+              {debrief.strengths.map((s, i) => (
+                <div key={i} style={{ fontSize: "13px", color: "rgba(235,229,220,0.5)", fontFamily: sans, marginBottom: "10px", lineHeight: "1.6", display: "flex", gap: "10px" }}>
+                  <span style={{ color: "#5B9E7A", flexShrink: 0 }}>→</span>{s}
+                </div>
+              ))}
+            </div>
+            <div style={{ background: bg, padding: "32px 36px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.18em", textTransform: "uppercase", color: "#B07070", marginBottom: "16px", fontFamily: sans }}>Areas to improve</div>
+              {debrief.weaknesses.map((w, i) => (
+                <div key={i} style={{ fontSize: "13px", color: "rgba(235,229,220,0.5)", fontFamily: sans, marginBottom: "10px", lineHeight: "1.6", display: "flex", gap: "10px" }}>
+                  <span style={{ color: "#B07070", flexShrink: 0 }}>×</span>{w}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {debrief.top3Improvements?.length > 0 && (
+            <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "24px", fontFamily: sans }}>Top 3 improvements</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                {debrief.top3Improvements.map((imp, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: "20px" }}>
+                    <div style={{ fontSize: "11px", color: "rgba(201,168,76,0.3)", fontFamily: sans, paddingTop: "2px" }}>{i + 1}</div>
+                    <div>
+                      <div style={{ fontSize: "14px", fontWeight: "300", color: text, marginBottom: "6px" }}>{imp.area}</div>
+                      <div style={{ fontSize: "12px", color: "rgba(235,229,220,0.35)", fontFamily: sans, marginBottom: "6px" }}>{imp.why}</div>
+                      <div style={{ fontSize: "12px", color: gold, fontFamily: sans, opacity: 0.7 }}>{imp.howToImprove}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {debrief.cheatSheet?.length > 0 && (
+            <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "20px", fontFamily: sans }}>For the real interview</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {debrief.cheatSheet.map((c, i) => (
+                  <div key={i} style={{ fontSize: "13px", color: "rgba(235,229,220,0.5)", fontFamily: sans, lineHeight: "1.6", display: "flex", gap: "12px" }}>
+                    <span style={{ color: gold, flexShrink: 0, opacity: 0.6 }}>→</span>{c}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {debrief.encouragement && (
+            <div style={{ padding: "32px 40px", border: "0.5px solid rgba(201,168,76,0.15)", marginBottom: "40px" }}>
+              <p style={{ fontSize: "16px", color: "rgba(235,229,220,0.6)", fontStyle: "italic", lineHeight: "1.8", margin: "0 0 12px", fontFamily: serif }}>"{debrief.encouragement}"</p>
+              <div style={{ fontSize: "11px", color: gold, fontFamily: sans, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6 }}>— Your companion</div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "16px" }}>
+            <button onClick={() => { setStage("input"); setJd(""); setPrep(null); setDebrief(null); setAnswers([]); setCurrentQ(0); }} style={{ border: "0.5px solid rgba(235,229,220,0.12)", background: "none", color: "rgba(235,229,220,0.4)", padding: "16px 32px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
+              Practice again
+            </button>
+            <Link href="/voice" style={{ display: "inline-flex", alignItems: "center", gap: "12px", background: gold, color: bg, padding: "16px 36px", textDecoration: "none", fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
+              Talk to your companion →
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
