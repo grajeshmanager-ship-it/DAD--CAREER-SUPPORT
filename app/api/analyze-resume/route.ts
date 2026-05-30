@@ -14,8 +14,7 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(request);
-const effectiveUserId = (await getUserIdFromRequest(request)) ?? "anonymous";
+    const effectiveUserId = (await getUserIdFromRequest(request)) ?? "anonymous";
 
     const { allowed, remaining, resetAt } = await checkRateLimit(effectiveUserId, "analyze-resume");
     if (!allowed) {
@@ -70,7 +69,7 @@ const effectiveUserId = (await getUserIdFromRequest(request)) ?? "anonymous";
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages: [
         {
           role: "user",
@@ -79,15 +78,19 @@ const effectiveUserId = (await getUserIdFromRequest(request)) ?? "anonymous";
 {
   "atsScore": number (0-100),
   "salaryRange": { "min": number, "max": number, "currency": "GBP" },
-  "currentLevel": string,
-  "topSkills": string[],
-  "missingKeywords": string[],
-  "skillGaps": string[],
-  "improvements": string[],
-  "formattingIssues": string[],
-  "jobMatches": [{ "title": string, "match": number, "reason": string }],
-  "courses": [{ "name": string, "provider": string, "reason": string }],
-  "summary": string
+  "currentLevel": string (e.g. "Mid-level Software Engineer"),
+  "marketReadiness": number (0-100),
+  "interviewReadiness": number (0-100),
+  "careerReadiness": number (0-100),
+  "topSkills": string[] (top 8 skills found),
+  "missingKeywords": string[] (important missing keywords),
+  "skillGaps": string[] (skills they should develop),
+  "improvements": [{ "title": string, "description": string }] (specific CV improvements, max 6),
+  "formattingIssues": string[] (formatting problems, max 4),
+  "jobMatches": [{ "title": string, "match": number, "reason": string, "averageSalary": string, "demandLevel": string }] (top 5 matching roles),
+  "courses": [{ "name": string, "provider": string, "reason": string, "url": string }] (top 4 recommended courses),
+  "summary": string (2-3 sentence summary written as "Here is what I learned about you..." — warm, personal, from a companion),
+  "insight": string (one powerful insight about this person that they may not have seen themselves — 1-2 sentences)
 }
 
 Return ONLY valid JSON. No explanation, no markdown, no backticks.
@@ -105,21 +108,24 @@ ${resumeText}`,
       const clean = responseText.replace(/```json|```/g, "").trim();
       analysis = JSON.parse(clean);
     } catch {
+      console.error("[analyze-resume] JSON parse failed:", responseText.slice(0, 300));
       return NextResponse.json(
         { error: "Analysis failed", message: "Something went wrong. Please try again." },
         { status: 500 }
       );
     }
 
-    await supabase
-      .from("profiles")
-      .update({
-        resume_summary: analysis.summary,
-        resume_ats_score: analysis.atsScore,
-        resume_skills: analysis.topSkills,
-        last_analysis_at: new Date().toISOString(),
-      })
-      .eq("id", userId);
+    if (effectiveUserId !== "anonymous") {
+      await supabase
+        .from("profiles")
+        .update({
+          resume_summary: analysis.summary,
+          resume_ats_score: analysis.atsScore,
+          resume_skills: analysis.topSkills,
+          last_analysis_at: new Date().toISOString(),
+        })
+        .eq("id", effectiveUserId);
+    }
 
     return NextResponse.json({ success: true, analysis });
   } catch (error) {
