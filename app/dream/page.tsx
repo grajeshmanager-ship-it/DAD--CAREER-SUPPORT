@@ -2,12 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createClient } from "@/lib/supabase/client";
 
 const DREAM_OPTIONS = [
   { id: "family", label: "Support my family", desc: "Give the people I love a better life", color: "#C9A84C" },
@@ -32,12 +27,12 @@ export default function DreamPage() {
   const sans = "'Helvetica Neue', Arial, sans-serif";
   const serif = "'Georgia', 'Times New Roman', serif";
   const gold = "#C9A84C";
-  const bg = "#070606";
   const dark = "#030202";
   const text = "#EBE5DC";
 
   useEffect(() => {
     const load = async () => {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const { data } = await supabase.from("profiles").select("companion_name").eq("id", user.id).single();
@@ -73,6 +68,7 @@ export default function DreamPage() {
     if (!dreamValue) return;
     setSaving(true);
     try {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await supabase.from("profiles").update({
@@ -93,7 +89,6 @@ export default function DreamPage() {
     <div style={{ minHeight: "100vh", background: dark, color: text, fontFamily: serif, position: "relative", overflow: "hidden" }}>
 
       <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translate(-50%, -50%)", width: "800px", height: "600px", background: `radial-gradient(ellipse, ${accentColor}0A 0%, transparent 70%)`, transition: "background 1.2s ease", pointerEvents: "none" }} />
-
       <div style={{ position: "absolute", bottom: "-60px", right: "-40px", fontSize: "clamp(200px, 30vw, 400px)", fontWeight: "700", color: `${accentColor}04`, letterSpacing: "-0.04em", lineHeight: "1", pointerEvents: "none", userSelect: "none", transition: "color 1.2s ease", fontFamily: serif }}>DAD</div>
 
       <div style={{ position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "45% 55%", minHeight: "100vh" }}>
@@ -108,9 +103,7 @@ export default function DreamPage() {
               Why does<br />this matter?
             </h1>
             <p style={{ fontSize: "15px", color: "rgba(235,229,220,0.4)", lineHeight: "1.9", fontFamily: sans, fontWeight: "300", maxWidth: "360px", marginBottom: "40px" }}>
-              Not what you want to do. Not what you are good at.
-              Why. The real reason behind all of this.
-              {companionName} will carry this with them through everything.
+              Not what you want to do. Not what you are good at. Why. The real reason behind all of this. {companionName} will carry this through everything.
             </p>
 
             <div style={{ minHeight: "120px" }}>
@@ -136,7 +129,7 @@ export default function DreamPage() {
           <div>
             {(selected || (showCustom && customDream.trim())) && (
               <button onClick={handleSave} disabled={saving} style={{ display: "inline-flex", alignItems: "center", gap: "14px", background: saving ? `${accentColor}60` : accentColor, color: dark, padding: "18px 44px", border: "none", cursor: saving ? "not-allowed" : "pointer", fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans, transition: "all 0.3s" }}>
-                {saving ? "Saving your dream..." : `${companionName} understands. Begin. →`}
+                {saving ? "Saving..." : `${companionName} understands. Begin. →`}
               </button>
             )}
             <div style={{ marginTop: "16px" }}>
@@ -153,7 +146,7 @@ export default function DreamPage() {
             <div key={i} onClick={() => { setSelected(dream.id); setShowCustom(false); }}
               style={{ flex: 1, padding: "0 48px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", borderBottom: "0.5px solid rgba(201,168,76,0.05)", borderLeft: selected === dream.id ? `2px solid ${dream.color}` : "2px solid transparent", background: selected === dream.id ? `${dream.color}06` : "transparent", transition: "all 0.25s ease", minHeight: "72px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
-                <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: `0.5px solid ${selected === dream.id ? dream.color : "rgba(201,168,76,0.12)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "border-color 0.3s" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: `0.5px solid ${selected === dream.id ? dream.color : "rgba(201,168,76,0.12)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   {selected === dream.id && <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: dream.color }} />}
                 </div>
                 <div>
@@ -164,8 +157,6 @@ export default function DreamPage() {
               <div style={{ fontSize: "16px", color: selected === dream.id ? dream.color : "rgba(235,229,220,0.08)", transition: "color 0.3s" }}>→</div>
             </div>
           ))}
-
-          {/* Something else */}
           <div onClick={() => { setShowCustom(true); setSelected(null); }}
             style={{ flex: 1, padding: "0 48px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", borderLeft: showCustom ? `2px solid ${gold}` : "2px solid transparent", background: showCustom ? `${gold}06` : "transparent", transition: "all 0.25s ease", minHeight: "72px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
