@@ -94,7 +94,7 @@ export default function InterviewPage() {
   const [speechRecognitionActive, setSpeechRecognitionActive] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const recognitionRef = useRef<InstanceType<typeof window.SpeechRecognition> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any const recognitionRef = useRef<any>(null);
   const behaviorIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasSpoken = useRef(false);
 
