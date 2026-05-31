@@ -249,7 +249,7 @@ export default function SignupPage() {
           "{companion?.greeting}"
         </p>
         <div style={{ width: "40px", height: "0.5px", background: companion?.color, margin: "0 auto 40px", opacity: 0.4 }} />
-        <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "14px", background: companion?.color, color: bg, padding: "18px 48px", textDecoration: "none", fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
+        <Link href="/dream" style={{ display: "inline-flex", alignItems: "center", gap: "14px", background: companion?.color, color: bg, padding: "18px 48px", textDecoration: "none", fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
           Begin the journey →
         </Link>
         <p style={{ marginTop: "24px", fontSize: "11px", color: "rgba(235,229,220,0.2)", fontFamily: sans, letterSpacing: "0.08em" }}>
