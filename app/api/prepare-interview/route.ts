@@ -4,6 +4,8 @@ import { extractText } from "unpdf";
 import { checkRateLimit, getUserIdFromRequest, rateLimitResponse } from "@/lib/rateLimit";
 import { validatePdfUpload } from "@/lib/validateUpload";
 
+export const maxDuration = 60;
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(request: NextRequest) {
@@ -21,10 +23,7 @@ export async function POST(request: NextRequest) {
 
     if (!jobDescription || jobDescription.trim().length < 20) {
       return NextResponse.json(
-        {
-          error: "Job description too short",
-          message: "Please paste the full job description.",
-        },
+        { error: "Job description too short", message: "Please paste the full job description." },
         { status: 400 }
       );
     }
@@ -39,10 +38,7 @@ export async function POST(request: NextRequest) {
         const arrayBuffer = await resumeFile.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         const { text } = await extractText(uint8Array, { mergePages: true });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        resumeText = Array.isArray(text)
-          ? text.map((t: string) => t).join("\n")
-          : String(text);
+        resumeText = Array.isArray(text) ? text.map((t: string) => t).join("\n") : String(text);
       } catch {
         console.warn("[prepare-interview] Resume extraction failed, continuing without it");
       }
