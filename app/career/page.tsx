@@ -5,7 +5,15 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import Vapi from "@vapi-ai/web";
 
-const VAPI_ASSISTANT_ID = "1312a1bf-ea33-48f7-aa21-1f16e414e885";
+const VAPI_ASSISTANT_IDS: Record<string, string> = {
+  student: "1679c582-82b1-4cf5-84b7-130fdddfc09e",
+  fresh_graduate: "2dc517f7-b55f-4d79-8e76-5933fdbd0c0f",
+  job_seeker: "448c1eaf-df29-4b32-a60b-ce880b6b552e",
+  employed_looking: "7d02717e-7ff6-470a-82b2-60b2b5b99a16",
+  career_change: "6cf7f967-5502-4b56-b033-d816fbee9043",
+  returning: "cdad5baf-c64a-4d0b-b259-93589c8564dc",
+  founder: "c5769b26-facf-442b-a2a0-9c749e650934",
+};
 
 const PERSONAS: Record<string, {
   title: string;
@@ -29,7 +37,7 @@ const PERSONAS: Record<string, {
     style: "Strategic, encouraging, precise. Reads CVs like a senior recruiter.",
     color: "#C9A84C",
     description: "A senior HR professional who has hired hundreds of graduates and knows exactly how to position you.",
-    openingLine: (cv, name) => `${name}, good to meet you. I've reviewed your background — ${cv ? cv.slice(0, 100) + "..." : "your profile looks interesting"}. Before I tell you what I think, I want to hear from you — what did you actually enjoy most in the last three years? Not what looked good on paper. What genuinely excited you?`,
+    openingLine: (cv, name) => `${name}, good to meet you. I'm James. I've reviewed your background — ${cv ? cv.slice(0, 100) + "..." : "your profile looks interesting"}. Before I tell you what I think, I want to hear from you — what did you actually enjoy most in the last three years? Not what looked good on paper. What genuinely excited you?`,
   },
   job_seeker: {
     title: "Senior Recruiter",
@@ -45,7 +53,7 @@ const PERSONAS: Record<string, {
     style: "Strategic, challenging, ambitious. Pushes beyond the surface answer.",
     color: "#5B9E7A",
     description: "An executive coach who helps ambitious professionals break through the ceiling they've hit.",
-    openingLine: (cv, name) => `${name}. I've looked at your background — ${cv ? cv.slice(0, 100) + "..." : "strong profile"}. You're employed. You're not desperate. So when someone in your position comes to me, I always ask the same question first — what's the thing your current role is never going to give you?`,
+    openingLine: (cv, name) => `${name}. I'm David. I've looked at your background — ${cv ? cv.slice(0, 100) + "..." : "strong profile"}. You're employed. You're not desperate. So when someone in your position comes to me, I always ask the same question first — what's the thing your current role is never going to give you?`,
   },
   career_change: {
     title: "Transition Specialist",
@@ -61,7 +69,7 @@ const PERSONAS: Record<string, {
     style: "Warm, non-judgmental, practical. Makes the gap feel like an asset.",
     color: "#5B9898",
     description: "A specialist who helps people returning to work reframe their break and rebuild their confidence.",
-    openingLine: (cv, name) => `${name}, lovely to meet you. I've looked at your background — ${cv ? cv.slice(0, 80) + "..." : "solid foundation"}. Before anything else — how are you feeling about coming back? Be honest with me.`,
+    openingLine: (cv, name) => `${name}, lovely to meet you. I'm Claire. I've looked at your background — ${cv ? cv.slice(0, 80) + "..." : "solid foundation"}. Before anything else — how are you feeling about coming back? Be honest with me.`,
   },
   founder: {
     title: "Startup Advisor",
@@ -118,7 +126,6 @@ export default function CareerPage() {
   const [vapiConnecting, setVapiConnecting] = useState(false);
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
   const [callDuration, setCallDuration] = useState(0);
-  const [volumeLevel, setVolumeLevel] = useState(0);
   const vapiRef = useRef<Vapi | null>(null);
   const transcriptRef = useRef<{ role: string; text: string }[]>([]);
   const hasSpoken = useRef(false);
@@ -257,6 +264,7 @@ export default function CareerPage() {
     const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
     if (!vapiKey) { setError("Voice not configured."); return; }
     const persona = PERSONAS[situation];
+    const assistantId = VAPI_ASSISTANT_IDS[situation];
     setStage("calling");
     setVapiConnecting(true);
     const firstMessage = persona.openingLine(cvText, userName);
@@ -285,7 +293,6 @@ export default function CareerPage() {
       });
 
       vapiInstance.on("volume-level", (level: number) => {
-        setVolumeLevel(level);
         volumeRef.current = level;
       });
 
@@ -298,7 +305,7 @@ export default function CareerPage() {
         }
       });
 
-      await vapiInstance.start(VAPI_ASSISTANT_ID, { firstMessage });
+      await vapiInstance.start(assistantId, { firstMessage });
     } catch {
       setVapiConnecting(false);
       setError("Failed to connect. Please try again.");
@@ -522,19 +529,16 @@ export default function CareerPage() {
           <Link href="/dashboard" style={{ fontSize: "11px", color: "rgba(235,229,220,0.25)", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>← Dashboard</Link>
         </nav>
         <div style={{ maxWidth: "900px", margin: "0 auto", padding: "60px 52px" }}>
-
           <div style={{ marginBottom: "16px", display: "flex", alignItems: "center", gap: "16px" }}>
             <div style={{ fontSize: "10px", letterSpacing: "0.18em", textTransform: "uppercase", color: `${accentColor}60`, fontFamily: sans }}>Session with {persona?.name} · {persona?.title}</div>
             <div style={{ height: "0.5px", flex: 1, background: `${accentColor}15` }} />
           </div>
-
           <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "48px", marginBottom: "48px" }}>
             <div style={{ fontSize: "10px", letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "16px", fontFamily: sans }}>Based on our conversation</div>
             <h2 style={{ fontSize: "clamp(24px, 3.5vw, 40px)", fontWeight: "300", color: accentColor, lineHeight: "1.2", marginBottom: "20px" }}>{result.careerPath}</h2>
             <p style={{ fontSize: "16px", color: "rgba(235,229,220,0.6)", lineHeight: "1.9", fontFamily: sans, fontWeight: "300", marginBottom: "20px", maxWidth: "680px" }}>{result.whoYouAre}</p>
             <p style={{ fontSize: "15px", color: "rgba(235,229,220,0.45)", lineHeight: "1.7", fontFamily: serif, fontStyle: "italic", maxWidth: "600px", margin: 0 }}>"{result.headline}"</p>
           </div>
-
           {result.strongestTraits?.length > 0 && (
             <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "20px", fontFamily: sans }}>What {persona?.name} saw in you</div>
@@ -543,7 +547,6 @@ export default function CareerPage() {
               </div>
             </div>
           )}
-
           {result.founderPath && (
             <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(255,107,53,0.6)", marginBottom: "24px", fontFamily: sans }}>Founder roadmap</div>
@@ -560,7 +563,6 @@ export default function CareerPage() {
               </div>
             </div>
           )}
-
           {result.topRoles?.length > 0 && (
             <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "24px", fontFamily: sans }}>Roles where you can succeed</div>
@@ -580,7 +582,6 @@ export default function CareerPage() {
               </div>
             </div>
           )}
-
           {result.skillsToLearn?.length > 0 && (
             <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "20px", fontFamily: sans }}>Skills to build next</div>
@@ -600,7 +601,6 @@ export default function CareerPage() {
               </div>
             </div>
           )}
-
           {result.actionPlan?.length > 0 && (
             <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "24px", fontFamily: sans }}>Your action plan</div>
@@ -617,7 +617,6 @@ export default function CareerPage() {
               </div>
             </div>
           )}
-
           {result.courses?.length > 0 && (
             <div style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)", paddingBottom: "40px", marginBottom: "40px" }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "24px", fontFamily: sans }}>Recommended courses</div>
@@ -634,14 +633,12 @@ export default function CareerPage() {
               </div>
             </div>
           )}
-
           {result.encouragement && (
             <div style={{ padding: "36px 44px", border: `0.5px solid ${accentColor}20`, background: `${accentColor}04`, marginBottom: "40px" }}>
               <p style={{ fontSize: "17px", color: "rgba(235,229,220,0.65)", fontStyle: "italic", lineHeight: "1.85", margin: "0 0 16px", fontFamily: serif }}>"{result.encouragement}"</p>
               <div style={{ fontSize: "11px", color: accentColor, fontFamily: sans, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6 }}>— {persona?.name}</div>
             </div>
           )}
-
           <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
             <button onClick={() => { setStage("select"); setResult(null); setTranscript([]); transcriptRef.current = []; setCallDuration(0); }}
               style={{ border: "0.5px solid rgba(235,229,220,0.12)", background: "none", color: "rgba(235,229,220,0.4)", padding: "16px 32px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
