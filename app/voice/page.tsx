@@ -220,7 +220,7 @@ export default function VoicePage() {
 
     try {
       // Pass ONLY assistantId and firstMessage — let Vapi use the voice set in dashboard
-      await vapiInstance.start(assistantId, { firstMessage });
+      await vapiInstance.start(assistantId);
     } catch {
       setVapiConnecting(false);
       setSwitching(false);
