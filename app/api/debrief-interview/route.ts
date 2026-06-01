@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { checkRateLimit, getUserIdFromRequest, rateLimitResponse } from "@/lib/rateLimit";
 
+export const maxDuration = 60;
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(request: NextRequest) {
@@ -14,19 +16,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { questions, answers, roleTitle, interviewerPersona, isTechnical } = body;
+    const { questions, answers, roleTitle, interviewerPersona, isTechnical, behaviorData } = body;
 
-    if (!questions || !answers || questions.length === 0) {
+    if (!questions || !answers) {
       return NextResponse.json(
-        { error: "Missing data", message: "No interview answers to debrief." },
+        { error: "Missing data", message: "Questions and answers are required." },
         { status: 400 }
       );
     }
 
-    const qaPairs = questions
-      .map((q: { question: string; type: string }, i: number) =>
-        `Q${i + 1} [${q.type}]: ${q.question}\nA${i + 1}: ${answers[i] || "(no answer given)"}`
-      )
+    const qaSection = questions
+      .map((q: { question: string }, i: number) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${answers[i] || "(no answer given)"}`)
       .join("\n\n");
 
     const message = await anthropic.messages.create({
@@ -35,36 +35,46 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `You are ${interviewerPersona?.name || "a senior hiring manager"}, ${interviewerPersona?.title || "interviewer"}, giving honest and constructive feedback on a mock interview for: ${roleTitle || "a professional role"}.
+          content: `You are ${interviewerPersona?.name || "a senior interviewer"}, ${interviewerPersona?.title || "a hiring manager"}. You just finished interviewing a candidate for a ${roleTitle || "role"} position. Your style: ${interviewerPersona?.style || "direct and professional"}.
 
-Be direct, honest, specific and genuinely helpful. This person wants real feedback, not generic encouragement.
+Evaluate their performance honestly and generate a detailed debrief.
+
+INTERVIEW TRANSCRIPT:
+${qaSection}
+
+${behaviorData ? `BEHAVIOUR ANALYSIS (from camera):
+- Eye contact score: ${Math.round(behaviorData.eyeContactScore)}%
+- Confidence score: ${Math.round(behaviorData.confidenceScore)}%
+- Speaking pace score: ${Math.round(behaviorData.paceScore)}%
+- Filler words detected: ${behaviorData.fillerCount} (${behaviorData.fillerWords?.join(", ") || "none"})
+- Engagement score: ${Math.round(behaviorData.engagementScore)}%` : ""}
 
 Return a JSON object with exactly these fields:
 
 {
-  "overallScore": number (0-100),
-  "verdict": string (one honest sentence — e.g. "Strong candidate who needs to work on technical depth and conciseness"),
+  "overallScore": number (0-100, be honest — average answers get 50-65, good answers 70-80, exceptional 85+),
+  "verdict": string (2-3 sentences on overall performance — specific, not generic),
   "hiringDecision": "strong yes" | "yes" | "maybe" | "no" | "strong no",
-  "strengths": string[] (top 3 genuine strengths shown in the interview),
-  "weaknesses": string[] (top 3 areas that genuinely need work),
+  "strengths": string[] (3-4 specific strengths from their actual answers),
+  "weaknesses": string[] (3-4 specific weaknesses from their actual answers),
   "questionBreakdown": [
     {
       "question": string,
       "score": number (0-100),
-      "whatTheyDid": string (specific observation about their answer),
-      "idealAnswer": string (what a great answer would include),
-      "tip": string (one actionable improvement)
+      "whatTheyDid": string (what was good or bad about their answer),
+      "idealAnswer": string (what the perfect answer would have looked like),
+      "tip": string (one specific thing to do differently)
     }
-  ],
+  ] (for every question),
   "top3Improvements": [
     {
       "area": string,
-      "why": string (why this matters for THIS role),
-      "howToImprove": string (specific, actionable steps)
+      "why": string,
+      "howToImprove": string (specific actionable advice)
     }
   ],
-  "cheatSheet": string[] (6 things to do differently in the real interview),
-  "encouragement": string (honest, warm closing — acknowledge what was good and what the path forward looks like — 2-3 sentences),
+  "cheatSheet": string[] (5 things to do differently in the real interview),
+  "encouragement": string (warm but honest closing — 2 sentences — from ${interviewerPersona?.name || "the interviewer"} personally),
   "readinessScore": {
     "technical": number (0-100),
     "communication": number (0-100),
@@ -73,10 +83,7 @@ Return a JSON object with exactly these fields:
   }
 }
 
-Return ONLY valid JSON. No explanation, no markdown, no backticks.
-
-INTERVIEW TRANSCRIPT:
-${qaPairs}`,
+Return ONLY valid JSON. No explanation, no markdown, no backticks.`,
         },
       ],
     });
@@ -90,7 +97,7 @@ ${qaPairs}`,
     } catch {
       console.error("[debrief-interview] JSON parse failed:", responseText.slice(0, 300));
       return NextResponse.json(
-        { error: "Debrief failed", message: "Something went wrong generating your debrief. Please try again." },
+        { error: "Debrief failed", message: "Something went wrong. Please try again." },
         { status: 500 }
       );
     }
