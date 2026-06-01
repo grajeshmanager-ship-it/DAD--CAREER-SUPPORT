@@ -3,6 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getUserIdFromRequest, rateLimitResponse } from "@/lib/rateLimit";
 
+export const maxDuration = 60;
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const supabase = createClient(
@@ -70,7 +72,7 @@ Generate a JSON roadmap with exactly these fields:
 {
   "careerPath": string (the specific path this person should pursue — precise, not generic),
   "headline": string (one powerful sentence about their potential — personal to what they shared),
-  "whoYouAre": string (3-4 sentences: "Based on everything you shared in our session, here is who I think you are..." — reference specific things they said, warm but direct),
+  "whoYouAre": string (3-4 sentences: based on everything shared, here is who I think you are — reference specific things they said, warm but direct),
   "strongestTraits": string[] (4-5 genuine character traits identified from the conversation — specific, not generic),
   "topRoles": [
     {
