@@ -27,62 +27,25 @@ const COMPANION_INFO: Record<string, { label: string; color: string }> = {
   partner_female: { label: "Partner", color: "#8870A8" },
 };
 
-const SWITCH_TRIGGERS: Record<string, string[]> = {
-  mom: [
-    "talk to mom", "speak to mom", "get mom", "call mom", "i want mom",
-    "can i talk to mom", "put mom on", "pass to mom", "get me mom",
-    "pass the call to mom", "pass me to mom", "connect me to mom",
-    "let me talk to mom", "switch to mom", "bring mom", "mom please",
-    "i need mom", "want to talk to mom", "can you get mom",
-    "hand me to mom", "hand over to mom", "give me mom",
-  ],
-  dad: [
-    "talk to dad", "speak to dad", "get dad", "call dad", "i want dad",
-    "can i talk to dad", "put dad on", "pass the call to dad",
-    "pass me to dad", "switch to dad", "hand me to dad", "give me dad",
-  ],
-  brother: [
-    "talk to my brother", "speak to my brother", "get my brother",
-    "call my brother", "i want my brother", "brother please", "get brother",
-    "pass the call to my brother", "pass me to my brother",
-    "switch to my brother", "can i talk to my brother", "hand me to my brother",
-  ],
-  sister: [
-    "talk to my sister", "speak to my sister", "get my sister",
-    "call my sister", "i want my sister", "sister please", "get sister",
-    "pass the call to my sister", "pass me to my sister",
-    "switch to my sister", "can i talk to my sister", "hand me to my sister",
-  ],
-  mentor: [
-    "talk to my mentor", "speak to my mentor", "get my mentor",
-    "i want my mentor", "mentor please", "pass the call to my mentor",
-    "switch to my mentor", "hand me to my mentor",
-  ],
-  friend: [
-    "talk to my friend", "speak to my friend", "get my friend",
-    "i want my friend", "friend please", "pass the call to my friend",
-    "switch to my friend", "hand me to my friend",
-  ],
-  partner_male: [
-    "talk to my partner", "speak to my partner", "get my partner",
-    "i want my partner", "get my boyfriend", "get my husband",
-    "pass the call to my partner", "switch to my partner",
-    "hand me to my partner",
-  ],
-  partner_female: [
-    "talk to my girlfriend", "speak to my girlfriend", "get my girlfriend",
-    "i want my girlfriend", "get my wife", "pass the call to my girlfriend",
-    "switch to my girlfriend", "hand me to my girlfriend",
-  ],
-};
-
-function detectSwitch(text: string): string | null {
+function detectSwitch(text: string, current: string): string | null {
   const lower = text.toLowerCase();
-  for (const [companion, triggers] of Object.entries(SWITCH_TRIGGERS)) {
-    for (const trigger of triggers) {
-      if (lower.includes(trigger)) return companion;
-    }
-  }
+
+  // Must contain a switch intent word
+  const intentWords = ["talk", "speak", "get", "call", "want", "pass", "switch", "connect", "bring", "put", "need", "can you", "could you", "let me", "i want", "i need"];
+  const hasIntent = intentWords.some(w => lower.includes(w));
+  if (!hasIntent) return null;
+
+  // Detect which companion
+  if ((lower.includes("mom") || lower.includes("mum") || lower.includes("mother")) && current !== "mom") return "mom";
+  if (lower.includes("sister") && current !== "sister") return "sister";
+  if (lower.includes("brother") && current !== "brother") return "brother";
+  if (lower.includes("mentor") && current !== "mentor") return "mentor";
+  if ((lower.includes("girlfriend") || lower.includes("wife")) && current !== "partner_female") return "partner_female";
+  if ((lower.includes("boyfriend") || lower.includes("husband")) && current !== "partner_male") return "partner_male";
+  if (lower.includes("friend") && !lower.includes("girlfriend") && current !== "friend") return "friend";
+  if ((lower.includes("dad") || lower.includes("father")) && !lower.includes("grandfather") && current !== "dad") return "dad";
+  if (lower.includes("partner") && !lower.includes("girlfriend") && !lower.includes("boyfriend") && current !== "partner_male" && current !== "partner_female") return "partner_male";
+
   return null;
 }
 
@@ -104,7 +67,7 @@ export default function VoicePage() {
   const animFrameRef = useRef<number>(0);
   const volumeRef = useRef(0);
   const activeCompanionRef = useRef<string>("dad");
-  const switchingRef = useRef(false); // prevents double firing
+  const switchingRef = useRef(false);
 
   const sans = "'Helvetica Neue', Arial, sans-serif";
   const serif = "'Georgia', 'Times New Roman', serif";
@@ -199,7 +162,6 @@ export default function VoicePage() {
   const startCall = async (companionKey: string) => {
     const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
     if (!vapiKey) return;
-
     const assistantId = COMPANION_IDS[companionKey];
     if (!assistantId) return;
 
@@ -242,10 +204,9 @@ export default function VoicePage() {
         transcriptRef.current = [...transcriptRef.current, entry];
         setTranscript([...transcriptRef.current]);
 
-        // Only detect switch from USER speech — not assistant speech
         if (msg.role === "user" && !switchingRef.current) {
-          const switchTo = detectSwitch(msg.transcript);
-          if (switchTo && switchTo !== activeCompanionRef.current) {
+          const switchTo = detectSwitch(msg.transcript, activeCompanionRef.current);
+          if (switchTo) {
             handleFamilySwitch(switchTo);
           }
         }
@@ -262,7 +223,6 @@ export default function VoicePage() {
   };
 
   const handleFamilySwitch = async (newCompanion: string) => {
-    // Hard guard — prevent double firing
     if (switchingRef.current) return;
     switchingRef.current = true;
 
@@ -271,15 +231,17 @@ export default function VoicePage() {
     setSwitchingTo(newCompanion);
 
     // Stop current call
-    if (vapiRef.current) {
-      try { vapiRef.current.stop(); } catch { /* ignore */ }
-      vapiRef.current = null;
+    const currentVapi = vapiRef.current;
+    vapiRef.current = null;
+    if (currentVapi) {
+      try { currentVapi.stop(); } catch { /* ignore */ }
     }
+
     setVapiActive(false);
     if (callTimerRef.current) clearInterval(callTimerRef.current);
     cancelAnimationFrame(animFrameRef.current);
 
-    // Add handoff line to transcript
+    // Add handoff to transcript
     transcriptRef.current = [...transcriptRef.current, {
       role: "system",
       text: `— ${COMPANION_INFO[currentCompanion]?.label} passed the call to ${COMPANION_INFO[newCompanion]?.label} —`,
@@ -287,15 +249,16 @@ export default function VoicePage() {
     }];
     setTranscript([...transcriptRef.current]);
 
-    // Wait then start new companion
+    // Wait 2 seconds then start new companion
     await new Promise(r => setTimeout(r, 2000));
     await startCall(newCompanion);
   };
 
   const endCall = () => {
-    if (vapiRef.current) {
-      try { vapiRef.current.stop(); } catch { /* ignore */ }
-      vapiRef.current = null;
+    const currentVapi = vapiRef.current;
+    vapiRef.current = null;
+    if (currentVapi) {
+      try { currentVapi.stop(); } catch { /* ignore */ }
     }
     setVapiActive(false);
     setVapiConnecting(false);
@@ -329,7 +292,6 @@ export default function VoicePage() {
           <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 50%, ${accentColor}06 0%, transparent 70%)`, transition: "background 0.8s" }} />
         )}
 
-        {/* Centre */}
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: `${accentColor}60`, marginBottom: "16px", fontFamily: sans }}>
             {currentInfo.label}
@@ -347,7 +309,6 @@ export default function VoicePage() {
           )}
         </div>
 
-        {/* Nav */}
         <div style={{ position: "absolute", top: "20px", left: "20px", right: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
           <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
           <button onClick={() => setShowFamily(!showFamily)} style={{ background: "rgba(235,229,220,0.04)", border: "0.5px solid rgba(235,229,220,0.08)", color: "rgba(235,229,220,0.35)", padding: "8px 20px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
@@ -355,7 +316,6 @@ export default function VoicePage() {
           </button>
         </div>
 
-        {/* Family dropdown */}
         {showFamily && (
           <div style={{ position: "absolute", top: "60px", right: "20px", zIndex: 20, background: "rgba(4,3,3,0.98)", border: `0.5px solid ${accentColor}20`, minWidth: "200px" }}>
             <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.25)", padding: "12px 18px", borderBottom: "0.5px solid rgba(235,229,220,0.05)", fontFamily: sans }}>
@@ -384,7 +344,6 @@ export default function VoicePage() {
           </div>
         )}
 
-        {/* Bottom controls */}
         <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
           {!vapiActive && !vapiConnecting && !switching && (
             <button onClick={() => startCall(activeCompanion)} style={{ background: accentColor, color: dark, border: "none", padding: "16px 52px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.18em", textTransform: "uppercase", fontFamily: sans }}>
@@ -435,7 +394,7 @@ export default function VoicePage() {
                 The conversation appears here as you talk.
               </p>
               <p style={{ fontSize: "12px", color: "rgba(235,229,220,0.1)", fontFamily: sans, lineHeight: "1.7" }}>
-                Say "Can I talk to Mom?" or "Pass the call to my sister" to switch mid-call.
+                Just say "Can I talk to Mom?" or "Get my sister" to switch mid-call.
               </p>
             </div>
           ) : (
@@ -464,7 +423,7 @@ export default function VoicePage() {
 
         <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.04)`, flexShrink: 0 }}>
           <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.12)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
-            Say <span style={{ color: `${accentColor}35` }}>"Can I talk to Mom?"</span> or <span style={{ color: `${accentColor}35` }}>"Pass the call to my sister"</span> to switch mid-call.
+            Say <span style={{ color: `${accentColor}35` }}>"Can I talk to Mom?"</span> or <span style={{ color: `${accentColor}35` }}>"Get my sister"</span> to switch mid-call.
           </p>
         </div>
       </div>
