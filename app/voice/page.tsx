@@ -61,9 +61,7 @@ export default function VoicePage() {
   const [transcript, setTranscript] = useState<{ role: string; text: string; companion: string }[]>([]);
   const [callDuration, setCallDuration] = useState(0);
   const [switching, setSwitching] = useState(false);
-  const [switchingTo, setSwitchingTo] = useState<string | null>(null);
   const [showFamily, setShowFamily] = useState(false);
-  const [userGender, setUserGender] = useState<string>("male");
   const vapiRef = useRef<Vapi | null>(null);
   const transcriptRef = useRef<{ role: string; text: string; companion: string }[]>([]);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -82,7 +80,7 @@ export default function VoicePage() {
   const serif = "'Georgia', 'Times New Roman', serif";
   const gold = "#C9A84C";
   const dark = "#020101";
-  const text = "#EBE5DC";
+  const textColor = "#EBE5DC";
 
   useEffect(() => {
     const load = async () => {
@@ -94,9 +92,7 @@ export default function VoicePage() {
           setProfile(data);
           setActiveCompanion(data.companion_type || "dad");
           activeCompanionRef.current = data.companion_type || "dad";
-          const g = data.gender || "male";
-          setUserGender(g);
-          userGenderRef.current = g;
+          userGenderRef.current = data.gender || "male";
         }
       }
       setLoading(false);
@@ -104,8 +100,8 @@ export default function VoicePage() {
     load();
   }, []);
 
-  const initScene = (cx: number, cy: number) => {
-    particlesRef.current = Array.from({ length: 200 }, (_, i) => ({
+  const initScene = () => {
+    particlesRef.current = Array.from({ length: 200 }, () => ({
       angle: Math.random() * Math.PI * 2,
       baseR: 40 + Math.random() * 220,
       speed: (0.0002 + Math.random() * 0.0008) * (Math.random() > 0.5 ? 1 : -1),
@@ -133,14 +129,17 @@ export default function VoicePage() {
     }));
   };
 
+  // Animation — runs once on mount, never stops
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
+    initScene();
 
     const draw = () => {
       const W = canvas.width = canvas.offsetWidth;
       const H = canvas.height = canvas.offsetHeight;
+      if (W === 0 || H === 0) { animFrameRef.current = requestAnimationFrame(draw); return; }
       const cx = W / 2, cy = H / 2;
       const comp = COMPANION_INFO[activeCompanionRef.current] || COMPANION_INFO.dad;
       const { rgb, rgb2 } = comp;
@@ -149,16 +148,13 @@ export default function VoicePage() {
       const t = timeRef.current;
       const vol = volumeRef.current;
 
-      if (!particlesRef.current.length) initScene(cx, cy);
-
       ctx.fillStyle = "#010101";
       ctx.fillRect(0, 0, W, H);
 
       // Nebula
       const nebula = ctx.createRadialGradient(cx, cy - H * 0.1, 0, cx, cy, Math.min(W, H) * 0.8);
-      nebula.addColorStop(0, `rgba(${rgb},0.03)`);
-      nebula.addColorStop(0.4, `rgba(${rgb},0.015)`);
-      nebula.addColorStop(0.8, `rgba(${rgb2},0.005)`);
+      nebula.addColorStop(0, `rgba(${rgb},0.04)`);
+      nebula.addColorStop(0.4, `rgba(${rgb},0.02)`);
       nebula.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = nebula; ctx.fillRect(0, 0, W, H);
 
@@ -192,7 +188,8 @@ export default function VoicePage() {
           const p = j / 20;
           const a = td.angle + Math.sin(td.wave + p * Math.PI * 2) * 0.3;
           const r = p * len + Math.sin(td.phase + t * 2 + p * Math.PI) * (30 + vol * 50) * p;
-          j === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85) : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85);
+          j === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85)
+                  : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85);
         }
         const grad = ctx.createLinearGradient(cx, cy, cx + Math.cos(td.angle) * len, cy + Math.sin(td.angle) * len * 0.85);
         grad.addColorStop(0, `rgba(${rgb2},${(0.12 + vol * 0.2) * 0.8})`);
@@ -209,7 +206,8 @@ export default function VoicePage() {
         for (let i = 0; i <= sides; i++) {
           const angle = (i / sides) * Math.PI * 2 + t * rotSpeed;
           const morphR = geoR * (0.85 + 0.15 * Math.cos(sides * angle));
-          i === 0 ? ctx.moveTo(cx + Math.cos(angle) * morphR, cy + Math.sin(angle) * morphR * 0.9) : ctx.lineTo(cx + Math.cos(angle) * morphR, cy + Math.sin(angle) * morphR * 0.9);
+          i === 0 ? ctx.moveTo(cx + Math.cos(angle) * morphR, cy + Math.sin(angle) * morphR * 0.9)
+                  : ctx.lineTo(cx + Math.cos(angle) * morphR, cy + Math.sin(angle) * morphR * 0.9);
         }
         ctx.strokeStyle = `rgba(${rgb},${(0.06 - si * 0.01) * (1 + vol * 0.8)})`;
         ctx.lineWidth = 0.5; ctx.stroke();
@@ -259,34 +257,32 @@ export default function VoicePage() {
       fireGrad.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = fireGrad; ctx.beginPath(); ctx.arc(cx, cy, coreR * 2.5, 0, Math.PI * 2); ctx.fill();
 
-      // Core highlight
       const hl = ctx.createRadialGradient(cx - coreR * 0.2, cy - coreR * 0.25, 0, cx, cy, coreR);
       hl.addColorStop(0, `rgba(255,255,255,${0.7 + vol * 0.2})`);
       hl.addColorStop(0.3, "rgba(255,255,255,0.1)");
       hl.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = hl; ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.fill();
 
-      // Energy bursts
+      // Energy bursts when speaking
       if (vol > 0.3) {
         const burstCount = Math.floor(vol * 8) + 3;
         for (let i = 0; i < burstCount; i++) {
-          const angle = (i / burstCount) * Math.PI * 2 + t * 0.8 + Math.sin(t * 3 + i) * 0.5;
-          const bLen = coreR * (2 + vol * 4 + Math.random() * 2);
+          const angle = (i / burstCount) * Math.PI * 2 + t * 0.8;
+          const bLen = coreR * (2 + vol * 4);
           const x1 = cx + Math.cos(angle) * coreR * 0.6, y1 = cy + Math.sin(angle) * coreR * 0.6;
           const x2 = cx + Math.cos(angle) * bLen, y2 = cy + Math.sin(angle) * bLen;
           const bg = ctx.createLinearGradient(x1, y1, x2, y2);
           bg.addColorStop(0, `rgba(${rgb2},${vol * 0.6})`);
-          bg.addColorStop(0.4, `rgba(${rgb},${vol * 0.3})`);
           bg.addColorStop(1, "rgba(0,0,0,0)");
           ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
           ctx.strokeStyle = bg; ctx.lineWidth = 0.5 + vol * 3; ctx.lineCap = "round"; ctx.stroke();
         }
       }
 
-      // Name
+      // Companion name
       const fontSize = Math.min(W * 0.09, 70);
       ctx.font = `200 ${fontSize}px Georgia,serif`;
-      ctx.fillStyle = `rgba(${rgb2},${0.85 + vol * 0.1})`;
+      ctx.fillStyle = `rgba(${rgb2},0.9)`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.shadowColor = comp.color; ctx.shadowBlur = 40 + vol * 30;
       ctx.fillText(comp.label, cx, cy);
@@ -297,27 +293,46 @@ export default function VoicePage() {
 
     animFrameRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [activeCompanion]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startCall = async (companionKey: string) => {
     const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
     if (!vapiKey) return;
     const assistantId = COMPANION_IDS[companionKey];
     if (!assistantId) return;
+
     setActiveCompanion(companionKey);
     activeCompanionRef.current = companionKey;
-    particlesRef.current = []; tendrilsRef.current = []; dustRef.current = [];
     setVapiConnecting(true);
+
     const vapiInstance = new Vapi(vapiKey);
     vapiRef.current = vapiInstance;
+
     vapiInstance.on("call-start", () => {
-      setVapiActive(true); setVapiConnecting(false);
-      setSwitching(false); setSwitchingTo(null); switchingRef.current = false;
+      setVapiActive(true);
+      setVapiConnecting(false);
+      setSwitching(false);
+      switchingRef.current = false;
       callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
     });
-    vapiInstance.on("call-end", () => { setVapiActive(false); if (callTimerRef.current) clearInterval(callTimerRef.current); });
-    vapiInstance.on("error", () => { setVapiActive(false); setVapiConnecting(false); setSwitching(false); switchingRef.current = false; });
-    vapiInstance.on("volume-level", (level: number) => { volumeRef.current = level; });
+
+    vapiInstance.on("call-end", () => {
+      setVapiActive(false);
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    });
+
+    vapiInstance.on("error", () => {
+      setVapiActive(false);
+      setVapiConnecting(false);
+      setSwitching(false);
+      switchingRef.current = false;
+    });
+
+    vapiInstance.on("volume-level", (level: number) => {
+      volumeRef.current = level;
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vapiInstance.on("message", (msg: any) => {
       if (msg?.type === "transcript" && msg?.transcriptType === "final") {
@@ -326,37 +341,60 @@ export default function VoicePage() {
         setTranscript([...transcriptRef.current]);
         if (msg.role === "user" && !switchingRef.current) {
           const switchTo = detectSwitch(msg.transcript, activeCompanionRef.current, userGenderRef.current);
-          if (switchTo) handleFamilySwitch(switchTo);
+          if (switchTo && switchTo !== activeCompanionRef.current) {
+            handleFamilySwitch(switchTo);
+          }
         }
       }
     });
-    try { await vapiInstance.start(assistantId); }
-    catch { setVapiConnecting(false); setSwitching(false); switchingRef.current = false; }
+
+    try {
+      await vapiInstance.start(assistantId);
+    } catch {
+      setVapiConnecting(false);
+      setSwitching(false);
+      switchingRef.current = false;
+    }
   };
 
   const handleFamilySwitch = async (newCompanion: string) => {
     if (switchingRef.current) return;
+    if (newCompanion === activeCompanionRef.current) return;
     switchingRef.current = true;
+
     const currentCompanion = activeCompanionRef.current;
-    setSwitching(true); setSwitchingTo(newCompanion);
-    const currentVapi = vapiRef.current; vapiRef.current = null;
+    setSwitching(true);
+
+    // Stop current call
+    const currentVapi = vapiRef.current;
+    vapiRef.current = null;
     if (currentVapi) { try { currentVapi.stop(); } catch { /* ignore */ } }
     setVapiActive(false);
     if (callTimerRef.current) clearInterval(callTimerRef.current);
+
+    // Add handoff to transcript
     transcriptRef.current = [...transcriptRef.current, {
       role: "system",
       text: `— ${COMPANION_INFO[currentCompanion]?.label} passed the call to ${COMPANION_INFO[newCompanion]?.label} —`,
       companion: "system"
     }];
     setTranscript([...transcriptRef.current]);
-    await new Promise(r => setTimeout(r, 2000));
+
+    // Wait then start new companion
+    await new Promise(r => setTimeout(r, 1500));
+    switchingRef.current = false;
     await startCall(newCompanion);
   };
 
   const endCall = () => {
-    const currentVapi = vapiRef.current; vapiRef.current = null;
+    const currentVapi = vapiRef.current;
+    vapiRef.current = null;
     if (currentVapi) { try { currentVapi.stop(); } catch { /* ignore */ } }
-    setVapiActive(false); setVapiConnecting(false); switchingRef.current = false;
+    setVapiActive(false);
+    setVapiConnecting(false);
+    setSwitching(false);
+    switchingRef.current = false;
+    volumeRef.current = 0;
     if (callTimerRef.current) clearInterval(callTimerRef.current);
   };
 
@@ -372,28 +410,31 @@ export default function VoicePage() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: dark, color: text, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", height: "100vh", overflow: "hidden" }}>
+    <div style={{ width: "100vw", height: "100vh", background: dark, color: textColor, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", overflow: "hidden" }}>
 
-      {/* Left — soul canvas — full screen no buttons */}
-      <div style={{ position: "relative", borderRight: `0.5px solid ${accentColor}10` }}>
-        <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+      {/* Left — full height soul canvas */}
+      <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10` }}>
+        <canvas
+          ref={canvasRef}
+          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "block" }}
+        />
 
-        {/* Centre overlay — minimal */}
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 10, pointerEvents: "none", marginTop: "80px" }}>
+        {/* Status — very subtle, bottom of centre */}
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 10, pointerEvents: "none", marginTop: "72px" }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(235,229,220,0.12)", fontFamily: sans }}>
-            {vapiActive ? "Present" : vapiConnecting ? "" : switching ? "" : "Ready"}
+            {vapiActive ? "Present" : switching ? "" : vapiConnecting ? "" : "Ready"}
           </div>
           {vapiActive && (
-            <div style={{ marginTop: "8px", fontSize: "12px", color: "rgba(235,229,220,0.12)", fontFamily: "monospace", letterSpacing: "0.16em" }}>
+            <div style={{ marginTop: "6px", fontSize: "11px", color: "rgba(235,229,220,0.1)", fontFamily: "monospace", letterSpacing: "0.14em" }}>
               {formatDuration(callDuration)}
             </div>
           )}
         </div>
 
-        {/* Nav — top */}
+        {/* Nav top */}
         <div style={{ position: "absolute", top: "24px", left: "24px", right: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
           <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: `${gold}40`, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
-          <button onClick={() => setShowFamily(!showFamily)} style={{ background: "transparent", border: `0.5px solid rgba(235,229,220,0.06)`, color: "rgba(235,229,220,0.2)", padding: "8px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
+          <button onClick={() => setShowFamily(!showFamily)} style={{ background: "transparent", border: `0.5px solid rgba(235,229,220,0.06)`, color: "rgba(235,229,220,0.18)", padding: "8px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
             Family
           </button>
         </div>
@@ -409,7 +450,7 @@ export default function VoicePage() {
                 onClick={() => {
                   setShowFamily(false);
                   if (vapiActive && key !== activeCompanion) handleFamilySwitch(key);
-                  else if (!vapiActive) { setActiveCompanion(key); activeCompanionRef.current = key; particlesRef.current = []; tendrilsRef.current = []; dustRef.current = []; }
+                  else if (!vapiActive) { setActiveCompanion(key); activeCompanionRef.current = key; }
                 }}
                 style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: activeCompanion === key ? `${info.color}08` : "transparent", borderLeft: activeCompanion === key ? `1px solid ${info.color}` : "1px solid transparent", transition: "all 0.2s" }}
                 onMouseEnter={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.02)"; }}
@@ -422,28 +463,31 @@ export default function VoicePage() {
           </div>
         )}
 
-        {/* Begin / End — bottom centre */}
+        {/* Bottom controls */}
         <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }}>
           {!vapiActive && !vapiConnecting && !switching && (
-            <button onClick={() => startCall(activeCompanion)}
-              style={{ background: "transparent", color: `${accentColor}80`, border: `0.5px solid ${accentColor}30`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans, transition: "all 0.4s" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${accentColor}10`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${accentColor}60`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.borderColor = `${accentColor}30`; }}
+            <button
+              onClick={() => startCall(activeCompanion)}
+              style={{ background: "transparent", color: `${accentColor}80`, border: `0.5px solid ${accentColor}30`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${accentColor}10`; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
             >
               Begin
             </button>
           )}
           {(vapiActive || vapiConnecting) && !switching && (
-            <button onClick={endCall}
-              style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.2)", color: "rgba(176,112,112,0.4)", padding: "12px 36px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
+            <button
+              onClick={endCall}
+              style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.2)", color: "rgba(176,112,112,0.4)", padding: "12px 36px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}
+            >
               End
             </button>
           )}
         </div>
       </div>
 
-      {/* Right — transcript only, no family list */}
-      <div style={{ display: "flex", flexDirection: "column", background: "#040303", overflow: "hidden" }}>
+      {/* Right — transcript only */}
+      <div style={{ display: "flex", flexDirection: "column", background: "#040303", height: "100vh", overflow: "hidden" }}>
         <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}08`, flexShrink: 0 }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}30`, marginBottom: "4px", fontFamily: sans }}>
             {vapiActive ? "Live" : "Conversation"}
@@ -453,11 +497,10 @@ export default function VoicePage() {
           </div>
         </div>
 
-        {/* Transcript only — no family list */}
         <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: "16px" }}>
           {transcript.length === 0 ? (
             <div style={{ paddingTop: "20px" }}>
-              <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.1)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.8", marginBottom: "16px" }}>
+              <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.1)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.8", marginBottom: "12px" }}>
                 The conversation appears here as you talk.
               </p>
               <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.06)", fontFamily: sans, lineHeight: "1.7" }}>
@@ -488,7 +531,7 @@ export default function VoicePage() {
 
         <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.03)`, flexShrink: 0 }}>
           <p style={{ fontSize: "10px", color: "rgba(235,229,220,0.07)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
-            Say <span style={{ color: `${accentColor}18` }}>"Can I talk to Mom?"</span> to switch mid-call.
+            Say <span style={{ color: `${accentColor}20` }}>"Can I talk to Mom?"</span> to switch mid-call.
           </p>
         </div>
       </div>
