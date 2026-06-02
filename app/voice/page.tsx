@@ -27,7 +27,7 @@ const COMPANION_INFO: Record<string, { label: string; color: string }> = {
   partner_female: { label: "Partner", color: "#8870A8" },
 };
 
-function detectSwitch(text: string, current: string): string | null {
+function detectSwitch(text: string, current: string, userGender: string): string | null {
   const lower = text.toLowerCase();
   const intentWords = ["talk", "speak", "get", "call", "want", "pass", "switch", "connect", "bring", "put", "need", "can you", "could you", "let me", "i want", "i need"];
   const hasIntent = intentWords.some(w => lower.includes(w));
@@ -41,13 +41,19 @@ function detectSwitch(text: string, current: string): string | null {
   if ((lower.includes("boyfriend") || lower.includes("husband")) && current !== "partner_male") return "partner_male";
   if (lower.includes("friend") && !lower.includes("girlfriend") && current !== "friend") return "friend";
   if ((lower.includes("dad") || lower.includes("father")) && !lower.includes("grandfather") && current !== "dad") return "dad";
-  if (lower.includes("partner") && !lower.includes("girlfriend") && !lower.includes("boyfriend") && current !== "partner_male" && current !== "partner_female") return "partner_male";
+
+  // Partner — use opposite gender of user
+  if (lower.includes("partner") && !lower.includes("girlfriend") && !lower.includes("boyfriend")) {
+    if (userGender === "male") return current !== "partner_female" ? "partner_female" : null;
+    if (userGender === "female") return current !== "partner_male" ? "partner_male" : null;
+    return current !== "partner_male" ? "partner_male" : null;
+  }
 
   return null;
 }
 
 export default function VoicePage() {
-  const [profile, setProfile] = useState<{ full_name: string; companion_type: string; companion_name: string } | null>(null);
+  const [profile, setProfile] = useState<{ full_name: string; companion_type: string; companion_name: string; gender: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeCompanion, setActiveCompanion] = useState<string>("dad");
   const [vapiActive, setVapiActive] = useState(false);
@@ -57,6 +63,7 @@ export default function VoicePage() {
   const [switching, setSwitching] = useState(false);
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
   const [showFamily, setShowFamily] = useState(false);
+  const [userGender, setUserGender] = useState<string>("male");
   const vapiRef = useRef<Vapi | null>(null);
   const transcriptRef = useRef<{ role: string; text: string; companion: string }[]>([]);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -65,6 +72,7 @@ export default function VoicePage() {
   const volumeRef = useRef(0);
   const activeCompanionRef = useRef<string>("dad");
   const switchingRef = useRef(false);
+  const userGenderRef = useRef<string>("male");
 
   const sans = "'Helvetica Neue', Arial, sans-serif";
   const serif = "'Georgia', 'Times New Roman', serif";
@@ -78,11 +86,14 @@ export default function VoicePage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data } = await supabase.from("profiles").select("full_name, companion_type, companion_name").eq("id", user.id).single();
+        const { data } = await supabase.from("profiles").select("full_name, companion_type, companion_name, gender").eq("id", user.id).single();
         if (data) {
           setProfile(data);
           setActiveCompanion(data.companion_type || "dad");
           activeCompanionRef.current = data.companion_type || "dad";
+          const g = data.gender || "male";
+          setUserGender(g);
+          userGenderRef.current = g;
         }
       }
       setLoading(false);
@@ -202,7 +213,7 @@ export default function VoicePage() {
         setTranscript([...transcriptRef.current]);
 
         if (msg.role === "user" && !switchingRef.current) {
-          const switchTo = detectSwitch(msg.transcript, activeCompanionRef.current);
+          const switchTo = detectSwitch(msg.transcript, activeCompanionRef.current, userGenderRef.current);
           if (switchTo) handleFamilySwitch(switchTo);
         }
       }
@@ -281,10 +292,10 @@ export default function VoicePage() {
 
         {/* Centre */}
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
-          <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: `${accentColor}60`, marginBottom: "16px", fontFamily: sans }}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: `${accentColor}60`, marginBottom: "16px", fontFamily: sans, transition: "color 0.8s" }}>
             {currentInfo.label}
           </div>
-          <div style={{ fontSize: "clamp(48px, 7vw, 80px)", fontWeight: "200", color: accentColor, letterSpacing: "-0.03em", lineHeight: "1", marginBottom: "12px", textShadow: `0 0 60px ${accentColor}30` }}>
+          <div style={{ fontSize: "clamp(48px, 7vw, 80px)", fontWeight: "200", color: accentColor, letterSpacing: "-0.03em", lineHeight: "1", marginBottom: "12px", textShadow: `0 0 60px ${accentColor}30`, transition: "color 0.8s" }}>
             {currentInfo.label}
           </div>
           <div style={{ fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "28px" }}>
@@ -351,8 +362,6 @@ export default function VoicePage() {
 
       {/* Right — transcript only */}
       <div style={{ display: "flex", flexDirection: "column", background: bg, overflow: "hidden" }}>
-
-        {/* Header */}
         <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}10`, flexShrink: 0 }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}50`, marginBottom: "4px", fontFamily: sans }}>
             {vapiActive ? "Live" : "Conversation"}
@@ -362,7 +371,6 @@ export default function VoicePage() {
           </div>
         </div>
 
-        {/* Transcript */}
         <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: "14px" }}>
           {transcript.length === 0 ? (
             <div style={{ paddingTop: "20px" }}>
@@ -397,7 +405,6 @@ export default function VoicePage() {
           )}
         </div>
 
-        {/* Footer hint */}
         <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.04)`, flexShrink: 0 }}>
           <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.1)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
             Say <span style={{ color: `${accentColor}30` }}>"Can I talk to Mom?"</span> or <span style={{ color: `${accentColor}30` }}>"Get my sister"</span> to switch mid-call.
