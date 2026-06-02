@@ -93,146 +93,112 @@ export default function VoicePage() {
     load();
   }, []);
 
-  // 3D sphere animation
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
 
     const draw = () => {
-      const W = canvas.width = canvas.offsetWidth;
-      const H = canvas.height = canvas.offsetHeight;
-      if (W === 0 || H === 0) { animFrameRef.current = requestAnimationFrame(draw); return; }
-
+      const W = canvas.width = window.innerWidth > 400 ? window.innerWidth - 400 : window.innerWidth;
+      const H = canvas.height = window.innerHeight;
       const cx = W / 2;
       const cy = H / 2;
       const comp = COMPANION_INFO[activeCompanionRef.current] || COMPANION_INFO.dad;
-      const vol = Math.max(0.08, volumeRef.current);
+      const { r, g, b } = comp;
+      const vol = Math.max(0.12, volumeRef.current);
 
       timeRef.current += 0.012;
       const t = timeRef.current;
 
-      // Pure black background
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, W, H);
 
-      const sphereR = Math.min(W, H) * 0.28 + vol * 20;
-      const breathe = 1 + Math.sin(t * 0.7) * 0.03 + vol * 0.05;
+      const sphereR = Math.min(W, H) * 0.26;
+      const breathe = 1 + Math.sin(t * 0.7) * 0.04 + vol * 0.06;
       const R = sphereR * breathe;
 
-      // ── GROUND GLOW — light pooling below ──
-      const groundY = cy + R * 1.1;
-      const groundGlow = ctx.createRadialGradient(cx, groundY, 0, cx, groundY, R * 1.8);
-      groundGlow.addColorStop(0, `rgba(${comp.r},${comp.g},${comp.b},${0.18 + vol * 0.15})`);
-      groundGlow.addColorStop(0.4, `rgba(${comp.r},${comp.g},${comp.b},${0.06})`);
-      groundGlow.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = groundGlow;
-      ctx.fillRect(0, 0, W, H);
+      // Ground glow
+      const groundY = cy + R * 1.05;
+      const gg = ctx.createRadialGradient(cx, groundY, 0, cx, groundY, R * 2);
+      gg.addColorStop(0, `rgba(${r},${g},${b},${0.2 + vol * 0.15})`);
+      gg.addColorStop(0.5, `rgba(${r},${g},${b},0.05)`);
+      gg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H);
 
-      // ── OUTER ATMOSPHERE GLOW ──
-      const atmoGlow = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 2.2);
-      atmoGlow.addColorStop(0, `rgba(${comp.r},${comp.g},${comp.b},${0.08 + vol * 0.08})`);
-      atmoGlow.addColorStop(0.5, `rgba(${comp.r},${comp.g},${comp.b},${0.03})`);
-      atmoGlow.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = atmoGlow;
-      ctx.fillRect(0, 0, W, H);
+      // Atmosphere
+      const ag = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2.5);
+      ag.addColorStop(0, `rgba(${r},${g},${b},${0.06 + vol * 0.08})`);
+      ag.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = ag; ctx.fillRect(0, 0, W, H);
 
-      // ── SPHERE DARK BASE ──
-      const baseSphere = ctx.createRadialGradient(
-        cx - R * 0.25, cy - R * 0.2, 0,
-        cx, cy, R
-      );
-      baseSphere.addColorStop(0, `rgba(${Math.min(255, comp.r + 80)},${Math.min(255, comp.g + 80)},${Math.min(255, comp.b + 80)},1)`);
-      baseSphere.addColorStop(0.3, `rgba(${comp.r},${comp.g},${comp.b},1)`);
-      baseSphere.addColorStop(0.7, `rgba(${Math.floor(comp.r * 0.4)},${Math.floor(comp.g * 0.4)},${Math.floor(comp.b * 0.4)},1)`);
-      baseSphere.addColorStop(1, `rgba(${Math.floor(comp.r * 0.1)},${Math.floor(comp.g * 0.1)},${Math.floor(comp.b * 0.1)},1)`);
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.fillStyle = baseSphere;
-      ctx.fill();
+      // Sphere base
+      const sg = ctx.createRadialGradient(cx - R * 0.28, cy - R * 0.22, 0, cx, cy, R);
+      sg.addColorStop(0, `rgba(${Math.min(255,r+90)},${Math.min(255,g+90)},${Math.min(255,b+90)},1)`);
+      sg.addColorStop(0.35, `rgba(${r},${g},${b},1)`);
+      sg.addColorStop(0.75, `rgba(${Math.floor(r*0.35)},${Math.floor(g*0.35)},${Math.floor(b*0.35)},1)`);
+      sg.addColorStop(1, `rgba(${Math.floor(r*0.08)},${Math.floor(g*0.08)},${Math.floor(b*0.08)},1)`);
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fillStyle = sg; ctx.fill();
 
-      // ── MESH / GRID on sphere surface ──
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.clip();
-
-      const gridAlpha = 0.15 + vol * 0.1;
-      const cols = 18;
-      const rows = 12;
-
-      // Vertical lines — longitude
-      for (let i = 0; i <= cols; i++) {
-        const angle = (i / cols) * Math.PI * 2 + t * 0.08;
-        const cosA = Math.cos(angle);
-        // Only draw front-facing lines
-        if (cosA < -0.1) continue;
-        const xOffset = cosA * R;
-        const scaleY = Math.sqrt(Math.max(0, 1 - (xOffset / R) ** 2));
-
-        ctx.beginPath();
-        ctx.ellipse(cx + xOffset, cy, 2, R * scaleY, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${Math.min(255, comp.r + 100)},${Math.min(255, comp.g + 100)},${Math.min(255, comp.b + 100)},${gridAlpha * cosA})`;
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-      }
-
-      // Horizontal lines — latitude
-      for (let j = 1; j < rows; j++) {
-        const phi = (j / rows) * Math.PI;
-        const yPos = cy - R * Math.cos(phi);
-        const rowR = R * Math.sin(phi);
-        if (rowR < 2) continue;
-
-        ctx.beginPath();
-        ctx.ellipse(cx, yPos, rowR, rowR * 0.15, 0, 0, Math.PI * 2);
-        const rowAlpha = gridAlpha * Math.sin(phi) * 0.8;
-        ctx.strokeStyle = `rgba(${Math.min(255, comp.r + 100)},${Math.min(255, comp.g + 100)},${Math.min(255, comp.b + 100)},${rowAlpha})`;
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-      }
-
-      ctx.restore();
-
-      // ── SPECULAR HIGHLIGHT — top left bright spot ──
-      const specX = cx - R * 0.28;
-      const specY = cy - R * 0.32;
-      const specGlow = ctx.createRadialGradient(specX, specY, 0, specX, specY, R * 0.55);
-      specGlow.addColorStop(0, `rgba(255,255,255,${0.55 + vol * 0.2})`);
-      specGlow.addColorStop(0.3, `rgba(255,255,255,${0.15})`);
-      specGlow.addColorStop(0.6, `rgba(${comp.r},${comp.g},${comp.b},0.05)`);
-      specGlow.addColorStop(1, "rgba(0,0,0,0)");
+      // Grid mesh clipped to sphere
       ctx.save();
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-      ctx.fillStyle = specGlow; ctx.fillRect(0, 0, W, H);
+      const ga = 0.18 + vol * 0.12;
+      for (let i = 0; i <= 18; i++) {
+        const angle = (i / 18) * Math.PI * 2 + t * 0.06;
+        const cosA = Math.cos(angle);
+        if (cosA < 0) continue;
+        const xOff = cosA * R;
+        const scaleY = Math.sqrt(Math.max(0, 1 - (xOff / R) ** 2));
+        ctx.beginPath();
+        ctx.ellipse(cx + xOff, cy, 2, R * scaleY, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${Math.min(255,r+120)},${Math.min(255,g+120)},${Math.min(255,b+120)},${ga * cosA})`;
+        ctx.lineWidth = 0.6; ctx.stroke();
+      }
+      for (let j = 1; j < 12; j++) {
+        const phi = (j / 12) * Math.PI;
+        const yPos = cy - R * Math.cos(phi);
+        const rowR = R * Math.sin(phi);
+        if (rowR < 3) continue;
+        ctx.beginPath();
+        ctx.ellipse(cx, yPos, rowR, rowR * 0.14, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${Math.min(255,r+100)},${Math.min(255,g+100)},${Math.min(255,b+100)},${ga * Math.sin(phi) * 0.7})`;
+        ctx.lineWidth = 0.5; ctx.stroke();
+      }
       ctx.restore();
 
-      // ── EDGE GLOW — rim lighting ──
-      const rimGrad = ctx.createRadialGradient(cx, cy, R * 0.75, cx, cy, R * 1.05);
-      rimGrad.addColorStop(0, "rgba(0,0,0,0)");
-      rimGrad.addColorStop(0.7, `rgba(${comp.r},${comp.g},${comp.b},${0.08 + vol * 0.1})`);
-      rimGrad.addColorStop(1, `rgba(${comp.r},${comp.g},${comp.b},${0.25 + vol * 0.15})`);
-      ctx.beginPath(); ctx.arc(cx, cy, R * 1.05, 0, Math.PI * 2);
-      ctx.fillStyle = rimGrad; ctx.fill();
+      // Specular highlight
+      const sx = cx - R * 0.3, sy = cy - R * 0.3;
+      const shg = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 0.6);
+      shg.addColorStop(0, `rgba(255,255,255,${0.6 + vol * 0.25})`);
+      shg.addColorStop(0.3, "rgba(255,255,255,0.12)");
+      shg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = shg; ctx.fillRect(0, 0, W, H);
+      ctx.restore();
 
-      // ── PULSE RINGS when speaking ──
-      if (vol > 0.15) {
-        for (let i = 0; i < 3; i++) {
-          const pulseR = R * (1.1 + i * 0.15) + Math.sin(t * 3 + i * 1.2) * vol * 15;
-          const pulseAlpha = (0.12 - i * 0.03) * vol;
-          ctx.beginPath(); ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${comp.r},${comp.g},${comp.b},${pulseAlpha})`;
-          ctx.lineWidth = 1.5 - i * 0.4;
-          ctx.stroke();
-        }
+      // Rim glow
+      const rg = ctx.createRadialGradient(cx, cy, R * 0.72, cx, cy, R * 1.08);
+      rg.addColorStop(0, "rgba(0,0,0,0)");
+      rg.addColorStop(0.6, `rgba(${r},${g},${b},${0.1 + vol * 0.1})`);
+      rg.addColorStop(1, `rgba(${r},${g},${b},${0.3 + vol * 0.2})`);
+      ctx.beginPath(); ctx.arc(cx, cy, R * 1.08, 0, Math.PI * 2);
+      ctx.fillStyle = rg; ctx.fill();
+
+      // Pulse rings
+      for (let i = 0; i < 4; i++) {
+        const pr = R * (1.12 + i * 0.14) + Math.sin(t * 2.5 + i * 1.1) * vol * 12;
+        const pa = (0.15 - i * 0.03) * vol;
+        ctx.beginPath(); ctx.arc(cx, cy, pr, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${Math.max(0, pa)})`;
+        ctx.lineWidth = 1.5 - i * 0.3; ctx.stroke();
       }
 
-      // ── COMPANION NAME below sphere ──
-      ctx.font = `200 14px 'Helvetica Neue', sans-serif`;
-      ctx.fillStyle = `rgba(${comp.r},${comp.g},${comp.b},0.5)`;
+      // Label
+      ctx.font = `300 13px 'Helvetica Neue', sans-serif`;
+      ctx.fillStyle = `rgba(${r},${g},${b},0.45)`;
       ctx.textAlign = "center";
-      ctx.letterSpacing = "0.3em";
-      ctx.fillText(comp.label.toUpperCase(), cx, cy + R + 36);
+      ctx.fillText(comp.label.toUpperCase(), cx, cy + R + 38);
 
       animFrameRef.current = requestAnimationFrame(draw);
     };
@@ -257,8 +223,14 @@ export default function VoicePage() {
       setSwitching(false); switchingRef.current = false;
       callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
     });
-    vapiInstance.on("call-end", () => { setVapiActive(false); if (callTimerRef.current) clearInterval(callTimerRef.current); });
-    vapiInstance.on("error", () => { setVapiActive(false); setVapiConnecting(false); setSwitching(false); switchingRef.current = false; });
+    vapiInstance.on("call-end", () => {
+      setVapiActive(false);
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    });
+    vapiInstance.on("error", () => {
+      setVapiActive(false); setVapiConnecting(false);
+      setSwitching(false); switchingRef.current = false;
+    });
     vapiInstance.on("volume-level", (level: number) => { volumeRef.current = level; });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vapiInstance.on("message", (msg: any) => {
@@ -319,29 +291,27 @@ export default function VoicePage() {
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: dark, color: textColor, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", overflow: "hidden" }}>
-
-      {/* Left — 3D sphere */}
       <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10` }}>
-        <canvas ref={canvasRef} width={1200} height={900} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "block" }} />
+        <canvas ref={canvasRef} style={{ display: "block", position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
 
-        {/* Status */}
-        <div style={{ position: "absolute", bottom: "120px", left: "50%", transform: "translateX(-50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
+        <div style={{ position: "absolute", bottom: "112px", left: "50%", transform: "translateX(-50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
           {vapiActive && (
-            <div style={{ fontSize: "11px", color: `${accentColor}40`, fontFamily: "monospace", letterSpacing: "0.14em" }}>
+            <div style={{ fontSize: "11px", color: `${accentColor}35`, fontFamily: "monospace", letterSpacing: "0.14em" }}>
               {formatDuration(callDuration)}
             </div>
           )}
+          {!vapiActive && !vapiConnecting && !switching && (
+            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}25`, fontFamily: sans }}>Ready</div>
+          )}
         </div>
 
-        {/* Nav top */}
         <div style={{ position: "absolute", top: "24px", left: "24px", right: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
-          <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: `${gold}40`, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
+          <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: `${gold}35`, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
           <button onClick={() => setShowFamily(!showFamily)} style={{ background: "transparent", border: `0.5px solid rgba(235,229,220,0.06)`, color: "rgba(235,229,220,0.18)", padding: "8px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
             Family
           </button>
         </div>
 
-        {/* Family dropdown */}
         {showFamily && (
           <div style={{ position: "absolute", top: "64px", right: "24px", zIndex: 20, background: "rgba(3,2,2,0.98)", border: `0.5px solid ${accentColor}20`, minWidth: "180px" }}>
             <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", padding: "10px 16px", borderBottom: "0.5px solid rgba(235,229,220,0.04)", fontFamily: sans }}>
@@ -365,15 +335,12 @@ export default function VoicePage() {
           </div>
         )}
 
-        {/* Bottom controls */}
         <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }}>
           {!vapiActive && !vapiConnecting && !switching && (
-            <button
-              onClick={() => startCall(activeCompanion)}
+            <button onClick={() => startCall(activeCompanion)}
               style={{ background: "transparent", color: `${accentColor}70`, border: `0.5px solid ${accentColor}30`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${accentColor}10`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-            >
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
               Begin
             </button>
           )}
@@ -385,7 +352,6 @@ export default function VoicePage() {
         </div>
       </div>
 
-      {/* Right — transcript */}
       <div style={{ display: "flex", flexDirection: "column", background: "#050404", height: "100vh", overflow: "hidden" }}>
         <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}08`, flexShrink: 0 }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}30`, marginBottom: "4px", fontFamily: sans }}>
