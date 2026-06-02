@@ -16,15 +16,15 @@ const COMPANION_IDS: Record<string, string> = {
   partner_female: "e4449654-c537-41db-8792-0d0f895ed12d",
 };
 
-const COMPANION_INFO: Record<string, { label: string; color: string; rgb: string; rgb2: string }> = {
-  dad:            { label: "Dad",     color: "#C9A84C", rgb: "201,168,76",  rgb2: "255,210,120" },
-  mom:            { label: "Mom",     color: "#C47BAA", rgb: "196,123,170", rgb2: "255,180,220" },
-  brother:        { label: "Brother", color: "#5BAA78", rgb: "91,170,120",  rgb2: "140,230,170" },
-  sister:         { label: "Sister",  color: "#E07878", rgb: "224,120,120", rgb2: "255,180,160" },
-  mentor:         { label: "Mentor",  color: "#7896FF", rgb: "120,150,255", rgb2: "180,200,255" },
-  friend:         { label: "Friend",  color: "#5BB4B4", rgb: "91,180,180",  rgb2: "140,230,230" },
-  partner_male:   { label: "Partner", color: "#A882D4", rgb: "168,130,212", rgb2: "210,170,255" },
-  partner_female: { label: "Partner", color: "#A882D4", rgb: "168,130,212", rgb2: "210,170,255" },
+const COMPANION_INFO: Record<string, { label: string; color: string; r: number; g: number; b: number }> = {
+  dad:            { label: "Dad",     color: "#C9A84C", r: 201, g: 168, b: 76  },
+  mom:            { label: "Mom",     color: "#C47BAA", r: 196, g: 123, b: 170 },
+  brother:        { label: "Brother", color: "#5BAA78", r: 91,  g: 170, b: 120 },
+  sister:         { label: "Sister",  color: "#E07878", r: 224, g: 120, b: 120 },
+  mentor:         { label: "Mentor",  color: "#7896FF", r: 120, g: 150, b: 255 },
+  friend:         { label: "Friend",  color: "#5BB4B4", r: 91,  g: 180, b: 180 },
+  partner_male:   { label: "Partner", color: "#A882D4", r: 168, g: 130, b: 212 },
+  partner_female: { label: "Partner", color: "#A882D4", r: 168, g: 130, b: 212 },
 };
 
 function detectSwitch(text: string, current: string, userGender: string): string | null {
@@ -48,10 +48,6 @@ function detectSwitch(text: string, current: string, userGender: string): string
   return null;
 }
 
-interface Particle { angle: number; baseR: number; speed: number; size: number; life: number; phase: number; layer: number; tilt: number; }
-interface Tendril { angle: number; length: number; speed: number; wave: number; width: number; phase: number; }
-interface Dust { x: number; y: number; s: number; a: number; speed: number; angle: number; }
-
 export default function VoicePage() {
   const [profile, setProfile] = useState<{ full_name: string; companion_type: string; companion_name: string; gender: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,15 +67,12 @@ export default function VoicePage() {
   const activeCompanionRef = useRef<string>("dad");
   const switchingRef = useRef(false);
   const userGenderRef = useRef<string>("male");
-  const particlesRef = useRef<Particle[]>([]);
-  const tendrilsRef = useRef<Tendril[]>([]);
-  const dustRef = useRef<Dust[]>([]);
   const timeRef = useRef(0);
 
   const sans = "'Helvetica Neue', Arial, sans-serif";
   const serif = "'Georgia', 'Times New Roman', serif";
   const gold = "#C9A84C";
-  const dark = "#020101";
+  const dark = "#000000";
   const textColor = "#EBE5DC";
 
   useEffect(() => {
@@ -100,193 +93,146 @@ export default function VoicePage() {
     load();
   }, []);
 
-  const initScene = () => {
-    particlesRef.current = Array.from({ length: 200 }, () => ({
-      angle: Math.random() * Math.PI * 2,
-      baseR: 40 + Math.random() * 220,
-      speed: (0.0002 + Math.random() * 0.0008) * (Math.random() > 0.5 ? 1 : -1),
-      size: 0.4 + Math.random() * 3,
-      life: Math.random(),
-      phase: Math.random() * Math.PI * 2,
-      layer: Math.floor(Math.random() * 3),
-      tilt: 0.3 + Math.random() * 0.7,
-    }));
-    tendrilsRef.current = Array.from({ length: 12 }, (_, i) => ({
-      angle: (i / 12) * Math.PI * 2,
-      length: 80 + Math.random() * 120,
-      speed: 0.002 + Math.random() * 0.003,
-      wave: Math.random() * Math.PI * 2,
-      width: 1 + Math.random() * 2,
-      phase: Math.random() * Math.PI * 2,
-    }));
-    dustRef.current = Array.from({ length: 300 }, () => ({
-      x: Math.random() * 800 - 400,
-      y: Math.random() * 600 - 300,
-      s: 0.2 + Math.random() * 1,
-      a: Math.random() * 0.3,
-      speed: 0.1 + Math.random() * 0.3,
-      angle: Math.random() * Math.PI * 2,
-    }));
-  };
-
-  // Animation — runs once on mount, never stops
+  // 3D sphere animation
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
-    initScene();
 
     const draw = () => {
       const W = canvas.width = canvas.offsetWidth;
       const H = canvas.height = canvas.offsetHeight;
       if (W === 0 || H === 0) { animFrameRef.current = requestAnimationFrame(draw); return; }
-      const cx = W / 2, cy = H / 2;
+
+      const cx = W / 2;
+      const cy = H / 2;
       const comp = COMPANION_INFO[activeCompanionRef.current] || COMPANION_INFO.dad;
-      const { rgb, rgb2 } = comp;
+      const vol = Math.max(0.08, volumeRef.current);
 
-      timeRef.current += 0.007;
+      timeRef.current += 0.012;
       const t = timeRef.current;
-      const vol = Math.max(0.15, volumeRef.current);
 
-      ctx.fillStyle = "#010101";
+      // Pure black background
+      ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, W, H);
 
-      // Nebula
-      const nebula = ctx.createRadialGradient(cx, cy - H * 0.1, 0, cx, cy, Math.min(W, H) * 0.8);
-      nebula.addColorStop(0, `rgba(${rgb},0.04)`);
-      nebula.addColorStop(0.4, `rgba(${rgb},0.02)`);
-      nebula.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = nebula; ctx.fillRect(0, 0, W, H);
+      const sphereR = Math.min(W, H) * 0.28 + vol * 20;
+      const breathe = 1 + Math.sin(t * 0.7) * 0.03 + vol * 0.05;
+      const R = sphereR * breathe;
 
-      // Dust
-      dustRef.current.forEach(d => {
-        d.x += Math.cos(d.angle) * d.speed * 0.3;
-        d.y += Math.sin(d.angle) * d.speed * 0.3;
-        if (Math.abs(d.x) > 500) d.x = -d.x;
-        if (Math.abs(d.y) > 400) d.y = -d.y;
-        ctx.beginPath(); ctx.arc(cx + d.x, cy + d.y, d.s, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${rgb},${d.a * (0.3 + vol * 0.5)})`; ctx.fill();
-      });
+      // ── GROUND GLOW — light pooling below ──
+      const groundY = cy + R * 1.1;
+      const groundGlow = ctx.createRadialGradient(cx, groundY, 0, cx, groundY, R * 1.8);
+      groundGlow.addColorStop(0, `rgba(${comp.r},${comp.g},${comp.b},${0.18 + vol * 0.15})`);
+      groundGlow.addColorStop(0.4, `rgba(${comp.r},${comp.g},${comp.b},${0.06})`);
+      groundGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = groundGlow;
+      ctx.fillRect(0, 0, W, H);
 
-      // Corona
-      const coronaR = 180 + vol * 80 + Math.sin(t * 0.6) * 20;
-      for (let i = 0; i < 3; i++) {
-        const r = coronaR * (1 + i * 0.35);
-        const g2 = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r);
-        g2.addColorStop(0, `rgba(${rgb},${(0.06 - i * 0.018) * (1 + vol)})`);
-        g2.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-      }
+      // ── OUTER ATMOSPHERE GLOW ──
+      const atmoGlow = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 2.2);
+      atmoGlow.addColorStop(0, `rgba(${comp.r},${comp.g},${comp.b},${0.08 + vol * 0.08})`);
+      atmoGlow.addColorStop(0.5, `rgba(${comp.r},${comp.g},${comp.b},${0.03})`);
+      atmoGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = atmoGlow;
+      ctx.fillRect(0, 0, W, H);
 
-      // Tendrils
-      tendrilsRef.current.forEach(td => {
-        td.angle += td.speed;
-        td.wave += 0.02;
-        const len = td.length * (1 + vol * 1.5);
+      // ── SPHERE DARK BASE ──
+      const baseSphere = ctx.createRadialGradient(
+        cx - R * 0.25, cy - R * 0.2, 0,
+        cx, cy, R
+      );
+      baseSphere.addColorStop(0, `rgba(${Math.min(255, comp.r + 80)},${Math.min(255, comp.g + 80)},${Math.min(255, comp.b + 80)},1)`);
+      baseSphere.addColorStop(0.3, `rgba(${comp.r},${comp.g},${comp.b},1)`);
+      baseSphere.addColorStop(0.7, `rgba(${Math.floor(comp.r * 0.4)},${Math.floor(comp.g * 0.4)},${Math.floor(comp.b * 0.4)},1)`);
+      baseSphere.addColorStop(1, `rgba(${Math.floor(comp.r * 0.1)},${Math.floor(comp.g * 0.1)},${Math.floor(comp.b * 0.1)},1)`);
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fillStyle = baseSphere;
+      ctx.fill();
+
+      // ── MESH / GRID on sphere surface ──
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.clip();
+
+      const gridAlpha = 0.15 + vol * 0.1;
+      const cols = 18;
+      const rows = 12;
+
+      // Vertical lines — longitude
+      for (let i = 0; i <= cols; i++) {
+        const angle = (i / cols) * Math.PI * 2 + t * 0.08;
+        const cosA = Math.cos(angle);
+        // Only draw front-facing lines
+        if (cosA < -0.1) continue;
+        const xOffset = cosA * R;
+        const scaleY = Math.sqrt(Math.max(0, 1 - (xOffset / R) ** 2));
+
         ctx.beginPath();
-        for (let j = 0; j <= 20; j++) {
-          const p = j / 20;
-          const a = td.angle + Math.sin(td.wave + p * Math.PI * 2) * 0.3;
-          const r = p * len + Math.sin(td.phase + t * 2 + p * Math.PI) * (30 + vol * 50) * p;
-          j === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85)
-                  : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85);
-        }
-        const grad = ctx.createLinearGradient(cx, cy, cx + Math.cos(td.angle) * len, cy + Math.sin(td.angle) * len * 0.85);
-        grad.addColorStop(0, `rgba(${rgb2},${(0.12 + vol * 0.2) * 0.8})`);
-        grad.addColorStop(0.5, `rgba(${rgb},${0.12 + vol * 0.2})`);
-        grad.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.strokeStyle = grad; ctx.lineWidth = td.width * (1 + vol * 2); ctx.stroke();
-      });
+        ctx.ellipse(cx + xOffset, cy, 2, R * scaleY, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${Math.min(255, comp.r + 100)},${Math.min(255, comp.g + 100)},${Math.min(255, comp.b + 100)},${gridAlpha * cosA})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
 
-      // Sacred geometry
-      [3, 4, 6, 8].forEach((sides, si) => {
-        const geoR = (90 + si * 45) * (1 + vol * 0.4) + Math.sin(t * 0.5 + si) * 15;
-        const rotSpeed = [0.12, -0.08, 0.05, -0.03][si];
+      // Horizontal lines — latitude
+      for (let j = 1; j < rows; j++) {
+        const phi = (j / rows) * Math.PI;
+        const yPos = cy - R * Math.cos(phi);
+        const rowR = R * Math.sin(phi);
+        if (rowR < 2) continue;
+
         ctx.beginPath();
-        for (let i = 0; i <= sides; i++) {
-          const angle = (i / sides) * Math.PI * 2 + t * rotSpeed;
-          const morphR = geoR * (0.85 + 0.15 * Math.cos(sides * angle));
-          i === 0 ? ctx.moveTo(cx + Math.cos(angle) * morphR, cy + Math.sin(angle) * morphR * 0.9)
-                  : ctx.lineTo(cx + Math.cos(angle) * morphR, cy + Math.sin(angle) * morphR * 0.9);
-        }
-        ctx.strokeStyle = `rgba(${rgb},${(0.06 - si * 0.01) * (1 + vol * 0.8)})`;
-        ctx.lineWidth = 0.5; ctx.stroke();
-      });
-
-      // Interference rings
-      for (let i = 0; i < 6; i++) {
-        const r = 50 + i * 35 + Math.sin(t * 0.8 + i * 0.9) * 20 * (1 + vol * 2);
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${rgb2},${Math.max(0, 0.12 - i * 0.018) * (0.5 + vol)})`;
-        ctx.lineWidth = 1.5 - i * 0.2; ctx.stroke();
+        ctx.ellipse(cx, yPos, rowR, rowR * 0.15, 0, 0, Math.PI * 2);
+        const rowAlpha = gridAlpha * Math.sin(phi) * 0.8;
+        ctx.strokeStyle = `rgba(${Math.min(255, comp.r + 100)},${Math.min(255, comp.g + 100)},${Math.min(255, comp.b + 100)},${rowAlpha})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
       }
 
-      // Particles
-      particlesRef.current.forEach(p => {
-        p.life += 0.004 + vol * 0.008;
-        if (p.life > 1) p.life = 0;
-        p.angle += p.speed * (1 + vol * 4);
-        const breathe = 1 + Math.sin(t * 0.9 + p.phase) * 0.15;
-        const orbitR = p.baseR * breathe + vol * 60 * p.layer * 0.5;
-        const wobble = Math.sin(t * 1.5 + p.phase) * 20 * (1 + vol);
-        const x = cx + Math.cos(p.angle) * orbitR + Math.cos(p.angle + Math.PI / 2) * wobble;
-        const y = cy + Math.sin(p.angle) * orbitR * p.tilt + Math.sin(p.angle + Math.PI / 2) * wobble * p.tilt;
-        const fade = Math.sin(p.life * Math.PI);
-        const alpha = fade * (0.5 + vol * 0.6) * [0.8, 0.5, 0.3][p.layer];
-        const sz = p.size * (1 + vol * 1.5) * fade;
-        if (alpha > 0.01) {
-          const col = p.layer === 0 ? rgb2 : rgb;
-          ctx.beginPath(); ctx.arc(x, y, sz, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${col},${alpha})`; ctx.fill();
-          if (sz > 1.2) {
-            const pg = ctx.createRadialGradient(x, y, 0, x, y, sz * 5);
-            pg.addColorStop(0, `rgba(${col},${alpha * 0.5})`);
-            pg.addColorStop(1, "rgba(0,0,0,0)");
-            ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(x, y, sz * 5, 0, Math.PI * 2); ctx.fill();
-          }
-        }
-      });
+      ctx.restore();
 
-      // Core
-      const coreR = (55 + vol * 45) * (Math.sin(t * 0.7) * 0.12 + 1);
-      const fireGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2);
-      fireGrad.addColorStop(0, `rgba(255,255,255,${0.6 + vol * 0.3})`);
-      fireGrad.addColorStop(0.15, `rgba(${rgb2},${0.8 + vol * 0.2})`);
-      fireGrad.addColorStop(0.4, `rgba(${rgb},${0.4 + vol * 0.3})`);
-      fireGrad.addColorStop(0.7, `rgba(${rgb},0.15)`);
-      fireGrad.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = fireGrad; ctx.beginPath(); ctx.arc(cx, cy, coreR * 2.5, 0, Math.PI * 2); ctx.fill();
+      // ── SPECULAR HIGHLIGHT — top left bright spot ──
+      const specX = cx - R * 0.28;
+      const specY = cy - R * 0.32;
+      const specGlow = ctx.createRadialGradient(specX, specY, 0, specX, specY, R * 0.55);
+      specGlow.addColorStop(0, `rgba(255,255,255,${0.55 + vol * 0.2})`);
+      specGlow.addColorStop(0.3, `rgba(255,255,255,${0.15})`);
+      specGlow.addColorStop(0.6, `rgba(${comp.r},${comp.g},${comp.b},0.05)`);
+      specGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = specGlow; ctx.fillRect(0, 0, W, H);
+      ctx.restore();
 
-      const hl = ctx.createRadialGradient(cx - coreR * 0.2, cy - coreR * 0.25, 0, cx, cy, coreR);
-      hl.addColorStop(0, `rgba(255,255,255,${0.7 + vol * 0.2})`);
-      hl.addColorStop(0.3, "rgba(255,255,255,0.1)");
-      hl.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = hl; ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.fill();
+      // ── EDGE GLOW — rim lighting ──
+      const rimGrad = ctx.createRadialGradient(cx, cy, R * 0.75, cx, cy, R * 1.05);
+      rimGrad.addColorStop(0, "rgba(0,0,0,0)");
+      rimGrad.addColorStop(0.7, `rgba(${comp.r},${comp.g},${comp.b},${0.08 + vol * 0.1})`);
+      rimGrad.addColorStop(1, `rgba(${comp.r},${comp.g},${comp.b},${0.25 + vol * 0.15})`);
+      ctx.beginPath(); ctx.arc(cx, cy, R * 1.05, 0, Math.PI * 2);
+      ctx.fillStyle = rimGrad; ctx.fill();
 
-      // Energy bursts when speaking
-      if (vol > 0.3) {
-        const burstCount = Math.floor(vol * 8) + 3;
-        for (let i = 0; i < burstCount; i++) {
-          const angle = (i / burstCount) * Math.PI * 2 + t * 0.8;
-          const bLen = coreR * (2 + vol * 4);
-          const x1 = cx + Math.cos(angle) * coreR * 0.6, y1 = cy + Math.sin(angle) * coreR * 0.6;
-          const x2 = cx + Math.cos(angle) * bLen, y2 = cy + Math.sin(angle) * bLen;
-          const bg = ctx.createLinearGradient(x1, y1, x2, y2);
-          bg.addColorStop(0, `rgba(${rgb2},${vol * 0.6})`);
-          bg.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-          ctx.strokeStyle = bg; ctx.lineWidth = 0.5 + vol * 3; ctx.lineCap = "round"; ctx.stroke();
+      // ── PULSE RINGS when speaking ──
+      if (vol > 0.15) {
+        for (let i = 0; i < 3; i++) {
+          const pulseR = R * (1.1 + i * 0.15) + Math.sin(t * 3 + i * 1.2) * vol * 15;
+          const pulseAlpha = (0.12 - i * 0.03) * vol;
+          ctx.beginPath(); ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${comp.r},${comp.g},${comp.b},${pulseAlpha})`;
+          ctx.lineWidth = 1.5 - i * 0.4;
+          ctx.stroke();
         }
       }
 
-      // Companion name
-      const fontSize = Math.min(W * 0.09, 70);
-      ctx.font = `200 ${fontSize}px Georgia,serif`;
-      ctx.fillStyle = `rgba(${rgb2},0.9)`;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.shadowColor = comp.color; ctx.shadowBlur = 40 + vol * 30;
-      ctx.fillText(comp.label, cx, cy);
-      ctx.shadowBlur = 0;
+      // ── COMPANION NAME below sphere ──
+      ctx.font = `200 14px 'Helvetica Neue', sans-serif`;
+      ctx.fillStyle = `rgba(${comp.r},${comp.g},${comp.b},0.5)`;
+      ctx.textAlign = "center";
+      ctx.letterSpacing = "0.3em";
+      ctx.fillText(comp.label.toUpperCase(), cx, cy + R + 36);
 
       animFrameRef.current = requestAnimationFrame(draw);
     };
@@ -301,38 +247,19 @@ export default function VoicePage() {
     if (!vapiKey) return;
     const assistantId = COMPANION_IDS[companionKey];
     if (!assistantId) return;
-
     setActiveCompanion(companionKey);
     activeCompanionRef.current = companionKey;
     setVapiConnecting(true);
-
     const vapiInstance = new Vapi(vapiKey);
     vapiRef.current = vapiInstance;
-
     vapiInstance.on("call-start", () => {
-      setVapiActive(true);
-      setVapiConnecting(false);
-      setSwitching(false);
-      switchingRef.current = false;
+      setVapiActive(true); setVapiConnecting(false);
+      setSwitching(false); switchingRef.current = false;
       callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
     });
-
-    vapiInstance.on("call-end", () => {
-      setVapiActive(false);
-      if (callTimerRef.current) clearInterval(callTimerRef.current);
-    });
-
-    vapiInstance.on("error", () => {
-      setVapiActive(false);
-      setVapiConnecting(false);
-      setSwitching(false);
-      switchingRef.current = false;
-    });
-
-    vapiInstance.on("volume-level", (level: number) => {
-      volumeRef.current = level;
-    });
-
+    vapiInstance.on("call-end", () => { setVapiActive(false); if (callTimerRef.current) clearInterval(callTimerRef.current); });
+    vapiInstance.on("error", () => { setVapiActive(false); setVapiConnecting(false); setSwitching(false); switchingRef.current = false; });
+    vapiInstance.on("volume-level", (level: number) => { volumeRef.current = level; });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vapiInstance.on("message", (msg: any) => {
       if (msg?.type === "transcript" && msg?.transcriptType === "final") {
@@ -341,59 +268,40 @@ export default function VoicePage() {
         setTranscript([...transcriptRef.current]);
         if (msg.role === "user" && !switchingRef.current) {
           const switchTo = detectSwitch(msg.transcript, activeCompanionRef.current, userGenderRef.current);
-          if (switchTo && switchTo !== activeCompanionRef.current) {
-            handleFamilySwitch(switchTo);
-          }
+          if (switchTo && switchTo !== activeCompanionRef.current) handleFamilySwitch(switchTo);
         }
       }
     });
-
-    try {
-      await vapiInstance.start(assistantId);
-    } catch {
-      setVapiConnecting(false);
-      setSwitching(false);
-      switchingRef.current = false;
-    }
+    try { await vapiInstance.start(assistantId); }
+    catch { setVapiConnecting(false); setSwitching(false); switchingRef.current = false; }
   };
 
   const handleFamilySwitch = async (newCompanion: string) => {
     if (switchingRef.current) return;
     if (newCompanion === activeCompanionRef.current) return;
     switchingRef.current = true;
-
     const currentCompanion = activeCompanionRef.current;
     setSwitching(true);
-
-    // Stop current call
-    const currentVapi = vapiRef.current;
-    vapiRef.current = null;
+    const currentVapi = vapiRef.current; vapiRef.current = null;
     if (currentVapi) { try { currentVapi.stop(); } catch { /* ignore */ } }
     setVapiActive(false);
     if (callTimerRef.current) clearInterval(callTimerRef.current);
-
-    // Add handoff to transcript
     transcriptRef.current = [...transcriptRef.current, {
       role: "system",
       text: `— ${COMPANION_INFO[currentCompanion]?.label} passed the call to ${COMPANION_INFO[newCompanion]?.label} —`,
       companion: "system"
     }];
     setTranscript([...transcriptRef.current]);
-
-    // Wait then start new companion
     await new Promise(r => setTimeout(r, 1500));
     switchingRef.current = false;
     await startCall(newCompanion);
   };
 
   const endCall = () => {
-    const currentVapi = vapiRef.current;
-    vapiRef.current = null;
+    const currentVapi = vapiRef.current; vapiRef.current = null;
     if (currentVapi) { try { currentVapi.stop(); } catch { /* ignore */ } }
-    setVapiActive(false);
-    setVapiConnecting(false);
-    setSwitching(false);
-    switchingRef.current = false;
+    setVapiActive(false); setVapiConnecting(false);
+    setSwitching(false); switchingRef.current = false;
     volumeRef.current = 0;
     if (callTimerRef.current) clearInterval(callTimerRef.current);
   };
@@ -412,20 +320,14 @@ export default function VoicePage() {
   return (
     <div style={{ width: "100vw", height: "100vh", background: dark, color: textColor, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", overflow: "hidden" }}>
 
-      {/* Left — full height soul canvas */}
+      {/* Left — 3D sphere */}
       <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10` }}>
-        <canvas
-          ref={canvasRef}
-          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "block" }}
-        />
+        <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "block" }} />
 
-        {/* Status — very subtle, bottom of centre */}
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 10, pointerEvents: "none", marginTop: "72px" }}>
-          <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(235,229,220,0.12)", fontFamily: sans }}>
-            {vapiActive ? "Present" : switching ? "" : vapiConnecting ? "" : "Ready"}
-          </div>
+        {/* Status */}
+        <div style={{ position: "absolute", bottom: "120px", left: "50%", transform: "translateX(-50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
           {vapiActive && (
-            <div style={{ marginTop: "6px", fontSize: "11px", color: "rgba(235,229,220,0.1)", fontFamily: "monospace", letterSpacing: "0.14em" }}>
+            <div style={{ fontSize: "11px", color: `${accentColor}40`, fontFamily: "monospace", letterSpacing: "0.14em" }}>
               {formatDuration(callDuration)}
             </div>
           )}
@@ -441,7 +343,7 @@ export default function VoicePage() {
 
         {/* Family dropdown */}
         {showFamily && (
-          <div style={{ position: "absolute", top: "64px", right: "24px", zIndex: 20, background: "rgba(3,2,2,0.98)", border: `0.5px solid ${accentColor}15`, minWidth: "180px" }}>
+          <div style={{ position: "absolute", top: "64px", right: "24px", zIndex: 20, background: "rgba(3,2,2,0.98)", border: `0.5px solid ${accentColor}20`, minWidth: "180px" }}>
             <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", padding: "10px 16px", borderBottom: "0.5px solid rgba(235,229,220,0.04)", fontFamily: sans }}>
               {vapiActive ? "Switch to" : "Talk to"}
             </div>
@@ -468,7 +370,7 @@ export default function VoicePage() {
           {!vapiActive && !vapiConnecting && !switching && (
             <button
               onClick={() => startCall(activeCompanion)}
-              style={{ background: "transparent", color: `${accentColor}80`, border: `0.5px solid ${accentColor}30`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans }}
+              style={{ background: "transparent", color: `${accentColor}70`, border: `0.5px solid ${accentColor}30`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${accentColor}10`; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
             >
@@ -476,18 +378,15 @@ export default function VoicePage() {
             </button>
           )}
           {(vapiActive || vapiConnecting) && !switching && (
-            <button
-              onClick={endCall}
-              style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.2)", color: "rgba(176,112,112,0.4)", padding: "12px 36px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}
-            >
+            <button onClick={endCall} style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.2)", color: "rgba(176,112,112,0.4)", padding: "12px 36px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
               End
             </button>
           )}
         </div>
       </div>
 
-      {/* Right — transcript only */}
-      <div style={{ display: "flex", flexDirection: "column", background: "#040303", height: "100vh", overflow: "hidden" }}>
+      {/* Right — transcript */}
+      <div style={{ display: "flex", flexDirection: "column", background: "#050404", height: "100vh", overflow: "hidden" }}>
         <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}08`, flexShrink: 0 }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}30`, marginBottom: "4px", fontFamily: sans }}>
             {vapiActive ? "Live" : "Conversation"}
