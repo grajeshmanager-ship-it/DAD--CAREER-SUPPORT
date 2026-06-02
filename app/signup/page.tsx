@@ -28,6 +28,7 @@ export default function SignupPage() {
   const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [gender, setGender] = useState<string>("male");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [hoveredCompanion, setHoveredCompanion] = useState<number | null>(null);
@@ -60,36 +61,22 @@ export default function SignupPage() {
     setTimeout(() => window.speechSynthesis.speak(utter), delay);
   };
 
-  // Voice on signup page load — once per session
   useEffect(() => {
     if (hasSpoken.current || sessionStorage.getItem("dad_signup_voiced")) return;
     hasSpoken.current = true;
     sessionStorage.setItem("dad_signup_voiced", "1");
-
-    const speak = () => speakLine(
-      "This is the beginning. Not of a product. Of a relationship that will change where you end up.",
-      0.86, 1000
-    );
-
-    if (window.speechSynthesis.getVoices().length > 0) {
-      speak();
-    } else {
-      window.speechSynthesis.onvoiceschanged = speak;
-    }
+    const speak = () => speakLine("This is the beginning. Not of a product. Of a relationship that will change where you end up.", 0.86, 1000);
+    if (window.speechSynthesis.getVoices().length > 0) speak();
+    else window.speechSynthesis.onvoiceschanged = speak;
   }, []);
 
-  // Voice on meeting screen — companion greeting
   useEffect(() => {
     if (step !== "meeting" || hasSpokenMeeting.current || !companion) return;
     hasSpokenMeeting.current = true;
     const pitch = companion.type === "mom" || companion.type === "sister" ? 1.08 : 0.88;
-
     const speak = () => speakLine(companion.greeting, pitch, 1200);
-    if (window.speechSynthesis.getVoices().length > 0) {
-      speak();
-    } else {
-      window.speechSynthesis.onvoiceschanged = speak;
-    }
+    if (window.speechSynthesis.getVoices().length > 0) speak();
+    else window.speechSynthesis.onvoiceschanged = speak;
   }, [step, companion]);
 
   const handleSignup = async () => {
@@ -102,9 +89,12 @@ export default function SignupPage() {
       if (signupError) throw signupError;
       if (data.user) {
         await supabase.from("profiles").upsert({
-          id: data.user.id, email, full_name: userName,
+          id: data.user.id,
+          email,
+          full_name: userName,
           companion_type: companion?.type,
           companion_name: companionName || companion?.sub,
+          gender: gender,
         });
       }
       setStep("meeting");
@@ -151,7 +141,8 @@ export default function SignupPage() {
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             {COMPANIONS.map((comp, i) => (
-              <div key={i} onClick={() => setSelectedCompanion(i)} onMouseEnter={() => setHoveredCompanion(i)} onMouseLeave={() => setHoveredCompanion(null)} style={{ flex: 1, padding: "0 52px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", borderBottom: "0.5px solid rgba(201,168,76,0.06)", borderLeft: selectedCompanion === i ? `2px solid ${comp.color}` : "2px solid transparent", background: selectedCompanion === i ? `${comp.color}06` : hoveredCompanion === i ? "rgba(235,229,220,0.015)" : "transparent", transition: "all 0.25s ease", minHeight: "80px" }}>
+              <div key={i} onClick={() => setSelectedCompanion(i)} onMouseEnter={() => setHoveredCompanion(i)} onMouseLeave={() => setHoveredCompanion(null)}
+                style={{ flex: 1, padding: "0 52px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", borderBottom: "0.5px solid rgba(201,168,76,0.06)", borderLeft: selectedCompanion === i ? `2px solid ${comp.color}` : "2px solid transparent", background: selectedCompanion === i ? `${comp.color}06` : hoveredCompanion === i ? "rgba(235,229,220,0.015)" : "transparent", transition: "all 0.25s ease", minHeight: "80px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
                   <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: `0.5px solid ${selectedCompanion === i || hoveredCompanion === i ? comp.color : "rgba(201,168,76,0.15)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "border-color 0.3s", flexShrink: 0 }}>
                     {selectedCompanion === i && <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: comp.color }} />}
@@ -205,6 +196,20 @@ export default function SignupPage() {
           <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", lineHeight: "1.8", fontFamily: sans, fontWeight: "300", marginBottom: "40px" }}>
             {companionName || companion?.sub} is ready. We just need to know who they are walking beside.
           </p>
+
+          {/* Gender selection */}
+          <div style={{ marginBottom: "32px", textAlign: "left" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "12px", fontFamily: sans }}>You are</div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {[{ value: "male", label: "Male" }, { value: "female", label: "Female" }, { value: "other", label: "Other" }].map(g => (
+                <button key={g.value} onClick={() => setGender(g.value)}
+                  style={{ flex: 1, padding: "12px", border: `0.5px solid ${gender === g.value ? companion?.color || gold : "rgba(201,168,76,0.15)"}`, background: gender === g.value ? `${companion?.color || gold}15` : "transparent", color: gender === g.value ? companion?.color || gold : "rgba(235,229,220,0.35)", cursor: "pointer", fontSize: "12px", fontFamily: sans, letterSpacing: "0.08em", transition: "all 0.2s" }}>
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: "flex", flexDirection: "column", marginBottom: "32px", textAlign: "left" }}>
             {[
               { label: "Your name", value: userName, setter: setUserName, type: "text", placeholder: "What should we call you?" },
@@ -217,6 +222,7 @@ export default function SignupPage() {
               </div>
             ))}
           </div>
+
           {error && <p style={{ fontSize: "12px", color: "#B07070", fontFamily: sans, marginBottom: "16px", textAlign: "center" }}>{error}</p>}
           <div style={{ display: "flex", gap: "16px", justifyContent: "center" }}>
             <button onClick={() => setStep("name")} style={{ background: "none", border: "0.5px solid rgba(235,229,220,0.12)", color: "rgba(235,229,220,0.3)", padding: "14px 28px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>← Back</button>
