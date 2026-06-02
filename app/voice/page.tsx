@@ -146,7 +146,7 @@ export default function VoicePage() {
 
       timeRef.current += 0.007;
       const t = timeRef.current;
-      const vol = volumeRef.current;
+      const vol = Math.max(0.15, volumeRef.current);
 
       ctx.fillStyle = "#010101";
       ctx.fillRect(0, 0, W, H);
