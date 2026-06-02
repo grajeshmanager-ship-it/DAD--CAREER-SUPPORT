@@ -322,7 +322,7 @@ export default function VoicePage() {
 
       {/* Left — 3D sphere */}
       <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10` }}>
-        <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "block" }} />
+        <canvas ref={canvasRef} width={1200} height={900} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "block" }} />
 
         {/* Status */}
         <div style={{ position: "absolute", bottom: "120px", left: "50%", transform: "translateX(-50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
