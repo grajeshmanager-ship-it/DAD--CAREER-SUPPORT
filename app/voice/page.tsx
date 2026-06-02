@@ -140,7 +140,7 @@ export default function VoicePage() {
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
       ctx.fillStyle = sg; ctx.fill();
 
-      // Grid mesh clipped to sphere
+      // Grid mesh
       ctx.save();
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
       const ga = 0.18 + vol * 0.12;
@@ -203,8 +203,10 @@ export default function VoicePage() {
       animFrameRef.current = requestAnimationFrame(draw);
     };
 
-    animFrameRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animFrameRef.current);
+    const startTimer = setTimeout(() => {
+      animFrameRef.current = requestAnimationFrame(draw);
+    }, 150);
+    return () => { clearTimeout(startTimer); cancelAnimationFrame(animFrameRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
