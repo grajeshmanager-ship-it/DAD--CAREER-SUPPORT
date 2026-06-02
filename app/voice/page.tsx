@@ -29,13 +29,10 @@ const COMPANION_INFO: Record<string, { label: string; color: string }> = {
 
 function detectSwitch(text: string, current: string): string | null {
   const lower = text.toLowerCase();
-
-  // Must contain a switch intent word
   const intentWords = ["talk", "speak", "get", "call", "want", "pass", "switch", "connect", "bring", "put", "need", "can you", "could you", "let me", "i want", "i need"];
   const hasIntent = intentWords.some(w => lower.includes(w));
   if (!hasIntent) return null;
 
-  // Detect which companion
   if ((lower.includes("mom") || lower.includes("mum") || lower.includes("mother")) && current !== "mom") return "mom";
   if (lower.includes("sister") && current !== "sister") return "sister";
   if (lower.includes("brother") && current !== "brother") return "brother";
@@ -206,9 +203,7 @@ export default function VoicePage() {
 
         if (msg.role === "user" && !switchingRef.current) {
           const switchTo = detectSwitch(msg.transcript, activeCompanionRef.current);
-          if (switchTo) {
-            handleFamilySwitch(switchTo);
-          }
+          if (switchTo) handleFamilySwitch(switchTo);
         }
       }
     });
@@ -230,18 +225,14 @@ export default function VoicePage() {
     setSwitching(true);
     setSwitchingTo(newCompanion);
 
-    // Stop current call
     const currentVapi = vapiRef.current;
     vapiRef.current = null;
-    if (currentVapi) {
-      try { currentVapi.stop(); } catch { /* ignore */ }
-    }
+    if (currentVapi) { try { currentVapi.stop(); } catch { /* ignore */ } }
 
     setVapiActive(false);
     if (callTimerRef.current) clearInterval(callTimerRef.current);
     cancelAnimationFrame(animFrameRef.current);
 
-    // Add handoff to transcript
     transcriptRef.current = [...transcriptRef.current, {
       role: "system",
       text: `— ${COMPANION_INFO[currentCompanion]?.label} passed the call to ${COMPANION_INFO[newCompanion]?.label} —`,
@@ -249,7 +240,6 @@ export default function VoicePage() {
     }];
     setTranscript([...transcriptRef.current]);
 
-    // Wait 2 seconds then start new companion
     await new Promise(r => setTimeout(r, 2000));
     await startCall(newCompanion);
   };
@@ -257,9 +247,7 @@ export default function VoicePage() {
   const endCall = () => {
     const currentVapi = vapiRef.current;
     vapiRef.current = null;
-    if (currentVapi) {
-      try { currentVapi.stop(); } catch { /* ignore */ }
-    }
+    if (currentVapi) { try { currentVapi.stop(); } catch { /* ignore */ } }
     setVapiActive(false);
     setVapiConnecting(false);
     switchingRef.current = false;
@@ -271,7 +259,6 @@ export default function VoicePage() {
   const currentInfo = COMPANION_INFO[activeCompanion] || COMPANION_INFO.dad;
   const accentColor = currentInfo.color;
   const firstName = profile?.full_name?.split(" ")[0] || "there";
-  const companionName = profile?.companion_name || "DAD";
 
   if (loading) {
     return (
@@ -282,7 +269,7 @@ export default function VoicePage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: dark, color: text, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 420px", height: "100vh", overflow: "hidden" }}>
+    <div style={{ minHeight: "100vh", background: dark, color: text, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", height: "100vh", overflow: "hidden" }}>
 
       {/* Left — waveform */}
       <div style={{ position: "relative", borderRight: `0.5px solid ${accentColor}15`, transition: "border-color 0.8s" }}>
@@ -292,15 +279,16 @@ export default function VoicePage() {
           <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 50%, ${accentColor}06 0%, transparent 70%)`, transition: "background 0.8s" }} />
         )}
 
+        {/* Centre */}
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.28em", textTransform: "uppercase", color: `${accentColor}60`, marginBottom: "16px", fontFamily: sans }}>
             {currentInfo.label}
           </div>
           <div style={{ fontSize: "clamp(48px, 7vw, 80px)", fontWeight: "200", color: accentColor, letterSpacing: "-0.03em", lineHeight: "1", marginBottom: "12px", textShadow: `0 0 60px ${accentColor}30` }}>
-            {companionName}
+            {currentInfo.label}
           </div>
-          <div style={{ fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.25)", fontFamily: sans, marginBottom: "28px" }}>
-            {switching ? `Connecting to ${COMPANION_INFO[switchingTo || ""]?.label || ""}...` : vapiConnecting ? "Connecting..." : vapiActive ? "Listening" : "Ready"}
+          <div style={{ fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "28px" }}>
+            {vapiActive ? "Listening" : vapiConnecting ? "" : switching ? "" : "Ready"}
           </div>
           {vapiActive && (
             <div style={{ fontSize: "13px", color: "rgba(235,229,220,0.2)", fontFamily: "monospace", letterSpacing: "0.12em" }}>
@@ -309,6 +297,7 @@ export default function VoicePage() {
           )}
         </div>
 
+        {/* Nav */}
         <div style={{ position: "absolute", top: "20px", left: "20px", right: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
           <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
           <button onClick={() => setShowFamily(!showFamily)} style={{ background: "rgba(235,229,220,0.04)", border: "0.5px solid rgba(235,229,220,0.08)", color: "rgba(235,229,220,0.35)", padding: "8px 20px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
@@ -316,6 +305,7 @@ export default function VoicePage() {
           </button>
         </div>
 
+        {/* Family dropdown */}
         {showFamily && (
           <div style={{ position: "absolute", top: "60px", right: "20px", zIndex: 20, background: "rgba(4,3,3,0.98)", border: `0.5px solid ${accentColor}20`, minWidth: "200px" }}>
             <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.25)", padding: "12px 18px", borderBottom: "0.5px solid rgba(235,229,220,0.05)", fontFamily: sans }}>
@@ -344,6 +334,7 @@ export default function VoicePage() {
           </div>
         )}
 
+        {/* Bottom controls */}
         <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
           {!vapiActive && !vapiConnecting && !switching && (
             <button onClick={() => startCall(activeCompanion)} style={{ background: accentColor, color: dark, border: "none", padding: "16px 52px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.18em", textTransform: "uppercase", fontFamily: sans }}>
@@ -355,54 +346,39 @@ export default function VoicePage() {
               End call
             </button>
           )}
-          {switching && (
-            <div style={{ fontSize: "11px", color: `${COMPANION_INFO[switchingTo || ""]?.color || gold}70`, fontFamily: sans, letterSpacing: "0.14em", textTransform: "uppercase" }}>
-              Connecting to {COMPANION_INFO[switchingTo || ""]?.label}...
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Right — transcript */}
+      {/* Right — transcript only */}
       <div style={{ display: "flex", flexDirection: "column", background: bg, overflow: "hidden" }}>
+
+        {/* Header */}
         <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}10`, flexShrink: 0 }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}50`, marginBottom: "4px", fontFamily: sans }}>
             {vapiActive ? "Live" : "Conversation"}
           </div>
-          <div style={{ fontSize: "14px", fontWeight: "300", color: text }}>{firstName} & {currentInfo.label}</div>
+          <div style={{ fontSize: "14px", fontWeight: "300", color: text }}>
+            {firstName} & {currentInfo.label}
+          </div>
         </div>
 
-        {!vapiActive && !vapiConnecting && (
-          <div style={{ padding: "16px 28px", borderBottom: `0.5px solid rgba(235,229,220,0.04)`, flexShrink: 0 }}>
-            <div style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(235,229,220,0.18)", marginBottom: "12px", fontFamily: sans }}>Who do you want to talk to?</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-              {Object.entries(COMPANION_INFO).map(([key, info]) => (
-                <button key={key}
-                  onClick={() => { setActiveCompanion(key); activeCompanionRef.current = key; }}
-                  style={{ background: activeCompanion === key ? `${info.color}15` : "transparent", border: `0.5px solid ${activeCompanion === key ? info.color : "rgba(235,229,220,0.08)"}`, color: activeCompanion === key ? info.color : "rgba(235,229,220,0.35)", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontFamily: sans, transition: "all 0.2s" }}>
-                  {info.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
+        {/* Transcript */}
         <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: "14px" }}>
           {transcript.length === 0 ? (
-            <div>
+            <div style={{ paddingTop: "20px" }}>
               <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.18)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.7", marginBottom: "12px" }}>
                 The conversation appears here as you talk.
               </p>
               <p style={{ fontSize: "12px", color: "rgba(235,229,220,0.1)", fontFamily: sans, lineHeight: "1.7" }}>
-                Just say "Can I talk to Mom?" or "Get my sister" to switch mid-call.
+                Just say "Can I talk to Mom?" or "Get my sister" at any time to switch.
               </p>
             </div>
           ) : (
             transcript.map((t, i) => {
               if (t.role === "system") {
                 return (
-                  <div key={i} style={{ textAlign: "center", padding: "6px 0" }}>
-                    <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.18)", fontFamily: sans, letterSpacing: "0.08em" }}>{t.text}</span>
+                  <div key={i} style={{ textAlign: "center", padding: "8px 0" }}>
+                    <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.2)", fontFamily: sans, letterSpacing: "0.08em" }}>{t.text}</span>
                   </div>
                 );
               }
@@ -421,9 +397,10 @@ export default function VoicePage() {
           )}
         </div>
 
+        {/* Footer hint */}
         <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.04)`, flexShrink: 0 }}>
-          <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.12)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
-            Say <span style={{ color: `${accentColor}35` }}>"Can I talk to Mom?"</span> or <span style={{ color: `${accentColor}35` }}>"Get my sister"</span> to switch mid-call.
+          <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.1)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
+            Say <span style={{ color: `${accentColor}30` }}>"Can I talk to Mom?"</span> or <span style={{ color: `${accentColor}30` }}>"Get my sister"</span> to switch mid-call.
           </p>
         </div>
       </div>
