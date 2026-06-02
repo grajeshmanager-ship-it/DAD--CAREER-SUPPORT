@@ -140,38 +140,35 @@ export default function VoicePage() {
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
       ctx.fillStyle = sg; ctx.fill();
 
-      // Grid mesh
+      // Particle mesh — thousands of dots on sphere surface
       ctx.save();
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-      const ga = 0.18 + vol * 0.12;
-      for (let i = 0; i <= 18; i++) {
-        const angle = (i / 18) * Math.PI * 2 + t * 0.06;
-        const cosA = Math.cos(angle);
-        if (cosA < 0) continue;
-        const xOff = cosA * R;
-        const scaleY = Math.sqrt(Math.max(0, 1 - (xOff / R) ** 2));
+      const particleCount = 1800;
+      for (let i = 0; i < particleCount; i++) {
+        const phi = Math.acos(1 - 2 * (i + 0.5) / particleCount);
+        const theta = Math.PI * (1 + Math.sqrt(5)) * i + t * 0.15;
+        const sinPhi = Math.sin(phi);
+        const x3d = sinPhi * Math.cos(theta);
+        const y3d = sinPhi * Math.sin(theta);
+        const z3d = Math.cos(phi);
+        if (z3d < -0.1) continue;
+        const px = cx + x3d * R;
+        const py = cy - y3d * R * 0.92;
+        const brightness = (z3d + 1) / 2;
+        const pSize = 0.4 + brightness * 1.2;
+        const alpha = 0.3 + brightness * 0.6;
         ctx.beginPath();
-        ctx.ellipse(cx + xOff, cy, 2, R * scaleY, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${Math.min(255,r+120)},${Math.min(255,g+120)},${Math.min(255,b+120)},${ga * cosA})`;
-        ctx.lineWidth = 0.6; ctx.stroke();
-      }
-      for (let j = 1; j < 12; j++) {
-        const phi = (j / 12) * Math.PI;
-        const yPos = cy - R * Math.cos(phi);
-        const rowR = R * Math.sin(phi);
-        if (rowR < 3) continue;
-        ctx.beginPath();
-        ctx.ellipse(cx, yPos, rowR, rowR * 0.14, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${Math.min(255,r+100)},${Math.min(255,g+100)},${Math.min(255,b+100)},${ga * Math.sin(phi) * 0.7})`;
-        ctx.lineWidth = 0.5; ctx.stroke();
+        ctx.arc(px, py, pSize, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${Math.min(255,r+80)},${Math.min(255,g+80)},${Math.min(255,b+80)},${alpha})`;
+        ctx.fill();
       }
       ctx.restore();
 
       // Specular highlight
       const sx = cx - R * 0.3, sy = cy - R * 0.3;
-      const shg = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 0.6);
-      shg.addColorStop(0, `rgba(255,255,255,${0.6 + vol * 0.25})`);
-      shg.addColorStop(0.3, "rgba(255,255,255,0.12)");
+      const shg = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 0.55);
+      shg.addColorStop(0, `rgba(255,255,255,${0.55 + vol * 0.2})`);
+      shg.addColorStop(0.3, "rgba(255,255,255,0.1)");
       shg.addColorStop(1, "rgba(0,0,0,0)");
       ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
       ctx.fillStyle = shg; ctx.fillRect(0, 0, W, H);
@@ -180,12 +177,12 @@ export default function VoicePage() {
       // Rim glow
       const rg = ctx.createRadialGradient(cx, cy, R * 0.72, cx, cy, R * 1.08);
       rg.addColorStop(0, "rgba(0,0,0,0)");
-      rg.addColorStop(0.6, `rgba(${r},${g},${b},${0.1 + vol * 0.1})`);
-      rg.addColorStop(1, `rgba(${r},${g},${b},${0.3 + vol * 0.2})`);
+      rg.addColorStop(0.6, `rgba(${r},${g},${b},${0.12 + vol * 0.1})`);
+      rg.addColorStop(1, `rgba(${r},${g},${b},${0.35 + vol * 0.2})`);
       ctx.beginPath(); ctx.arc(cx, cy, R * 1.08, 0, Math.PI * 2);
       ctx.fillStyle = rg; ctx.fill();
 
-      // Pulse rings
+      // Pulse rings when speaking
       for (let i = 0; i < 4; i++) {
         const pr = R * (1.12 + i * 0.14) + Math.sin(t * 2.5 + i * 1.1) * vol * 12;
         const pa = (0.15 - i * 0.03) * vol;
@@ -203,10 +200,19 @@ export default function VoicePage() {
       animFrameRef.current = requestAnimationFrame(draw);
     };
 
-    const startTimer = setTimeout(() => {
-      animFrameRef.current = requestAnimationFrame(draw);
-    }, 150);
-    return () => { clearTimeout(startTimer); cancelAnimationFrame(animFrameRef.current); };
+    // Retry until window has real dimensions
+    let attempts = 0;
+    const tryStart = () => {
+      attempts++;
+      if (window.innerWidth > 0 && window.innerHeight > 0) {
+        animFrameRef.current = requestAnimationFrame(draw);
+      } else if (attempts < 20) {
+        setTimeout(tryStart, 100);
+      }
+    };
+    setTimeout(tryStart, 50);
+
+    return () => cancelAnimationFrame(animFrameRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
