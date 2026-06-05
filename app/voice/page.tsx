@@ -16,15 +16,15 @@ const COMPANION_IDS: Record<string, string> = {
   partner_female: "e4449654-c537-41db-8792-0d0f895ed12d",
 };
 
-const COMPANION_INFO: Record<string, { label: string; color: string; r: number; g: number; b: number }> = {
-  dad:            { label: "Dad",     color: "#C9A84C", r: 201, g: 168, b: 76  },
-  mom:            { label: "Mom",     color: "#C47BAA", r: 196, g: 123, b: 170 },
-  brother:        { label: "Brother", color: "#5BAA78", r: 91,  g: 170, b: 120 },
-  sister:         { label: "Sister",  color: "#E07878", r: 224, g: 120, b: 120 },
-  mentor:         { label: "Mentor",  color: "#7896FF", r: 120, g: 150, b: 255 },
-  friend:         { label: "Friend",  color: "#5BB4B4", r: 91,  g: 180, b: 180 },
-  partner_male:   { label: "Partner", color: "#A882D4", r: 168, g: 130, b: 212 },
-  partner_female: { label: "Partner", color: "#A882D4", r: 168, g: 130, b: 212 },
+const COMPANION_INFO: Record<string, { label: string; color: string }> = {
+  dad:            { label: "Dad",     color: "#C9A84C" },
+  mom:            { label: "Mom",     color: "#C47BAA" },
+  brother:        { label: "Brother", color: "#5BAA78" },
+  sister:         { label: "Sister",  color: "#E07878" },
+  mentor:         { label: "Mentor",  color: "#7896FF" },
+  friend:         { label: "Friend",  color: "#5BB4B4" },
+  partner_male:   { label: "Partner", color: "#A882D4" },
+  partner_female: { label: "Partner", color: "#A882D4" },
 };
 
 function detectSwitch(text: string, current: string, userGender: string): string | null {
@@ -58,16 +58,13 @@ export default function VoicePage() {
   const [callDuration, setCallDuration] = useState(0);
   const [switching, setSwitching] = useState(false);
   const [showFamily, setShowFamily] = useState(false);
+  const [volume, setVolume] = useState(0);
   const vapiRef = useRef<Vapi | null>(null);
   const transcriptRef = useRef<{ role: string; text: string; companion: string }[]>([]);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animFrameRef = useRef<number>(0);
-  const volumeRef = useRef(0);
-  const activeCompanionRef = useRef<string>("dad");
   const switchingRef = useRef(false);
   const userGenderRef = useRef<string>("male");
-  const timeRef = useRef(0);
+  const activeCompanionRef = useRef<string>("dad");
 
   const sans = "'Helvetica Neue', Arial, sans-serif";
   const serif = "'Georgia', 'Times New Roman', serif";
@@ -93,129 +90,6 @@ export default function VoicePage() {
     load();
   }, []);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-
-    const draw = () => {
-      const W = canvas.width = window.innerWidth > 400 ? window.innerWidth - 400 : window.innerWidth;
-      const H = canvas.height = window.innerHeight;
-      const cx = W / 2;
-      const cy = H / 2;
-      const comp = COMPANION_INFO[activeCompanionRef.current] || COMPANION_INFO.dad;
-      const { r, g, b } = comp;
-      const vol = Math.max(0.12, volumeRef.current);
-
-      timeRef.current += 0.012;
-      const t = timeRef.current;
-
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(0, 0, W, H);
-
-      const sphereR = Math.min(W, H) * 0.26;
-      const breathe = 1 + Math.sin(t * 0.7) * 0.04 + vol * 0.06;
-      const R = sphereR * breathe;
-
-      // Ground glow
-      const groundY = cy + R * 1.05;
-      const gg = ctx.createRadialGradient(cx, groundY, 0, cx, groundY, R * 2);
-      gg.addColorStop(0, `rgba(${r},${g},${b},${0.2 + vol * 0.15})`);
-      gg.addColorStop(0.5, `rgba(${r},${g},${b},0.05)`);
-      gg.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H);
-
-      // Atmosphere
-      const ag = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2.5);
-      ag.addColorStop(0, `rgba(${r},${g},${b},${0.06 + vol * 0.08})`);
-      ag.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = ag; ctx.fillRect(0, 0, W, H);
-
-      // Sphere base
-      const sg = ctx.createRadialGradient(cx - R * 0.28, cy - R * 0.22, 0, cx, cy, R);
-      sg.addColorStop(0, `rgba(${Math.min(255,r+90)},${Math.min(255,g+90)},${Math.min(255,b+90)},1)`);
-      sg.addColorStop(0.35, `rgba(${r},${g},${b},1)`);
-      sg.addColorStop(0.75, `rgba(${Math.floor(r*0.35)},${Math.floor(g*0.35)},${Math.floor(b*0.35)},1)`);
-      sg.addColorStop(1, `rgba(${Math.floor(r*0.08)},${Math.floor(g*0.08)},${Math.floor(b*0.08)},1)`);
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.fillStyle = sg; ctx.fill();
-
-      // Particle mesh — thousands of dots on sphere surface
-      ctx.save();
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-      const particleCount = 1800;
-      for (let i = 0; i < particleCount; i++) {
-        const phi = Math.acos(1 - 2 * (i + 0.5) / particleCount);
-        const theta = Math.PI * (1 + Math.sqrt(5)) * i + t * 0.15;
-        const sinPhi = Math.sin(phi);
-        const x3d = sinPhi * Math.cos(theta);
-        const y3d = sinPhi * Math.sin(theta);
-        const z3d = Math.cos(phi);
-        if (z3d < -0.1) continue;
-        const px = cx + x3d * R;
-        const py = cy - y3d * R * 0.92;
-        const brightness = (z3d + 1) / 2;
-        const pSize = 0.4 + brightness * 1.2;
-        const alpha = 0.3 + brightness * 0.6;
-        ctx.beginPath();
-        ctx.arc(px, py, pSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${Math.min(255,r+80)},${Math.min(255,g+80)},${Math.min(255,b+80)},${alpha})`;
-        ctx.fill();
-      }
-      ctx.restore();
-
-      // Specular highlight
-      const sx = cx - R * 0.3, sy = cy - R * 0.3;
-      const shg = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 0.55);
-      shg.addColorStop(0, `rgba(255,255,255,${0.55 + vol * 0.2})`);
-      shg.addColorStop(0.3, "rgba(255,255,255,0.1)");
-      shg.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-      ctx.fillStyle = shg; ctx.fillRect(0, 0, W, H);
-      ctx.restore();
-
-      // Rim glow
-      const rg = ctx.createRadialGradient(cx, cy, R * 0.72, cx, cy, R * 1.08);
-      rg.addColorStop(0, "rgba(0,0,0,0)");
-      rg.addColorStop(0.6, `rgba(${r},${g},${b},${0.12 + vol * 0.1})`);
-      rg.addColorStop(1, `rgba(${r},${g},${b},${0.35 + vol * 0.2})`);
-      ctx.beginPath(); ctx.arc(cx, cy, R * 1.08, 0, Math.PI * 2);
-      ctx.fillStyle = rg; ctx.fill();
-
-      // Pulse rings when speaking
-      for (let i = 0; i < 4; i++) {
-        const pr = R * (1.12 + i * 0.14) + Math.sin(t * 2.5 + i * 1.1) * vol * 12;
-        const pa = (0.15 - i * 0.03) * vol;
-        ctx.beginPath(); ctx.arc(cx, cy, pr, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${r},${g},${b},${Math.max(0, pa)})`;
-        ctx.lineWidth = 1.5 - i * 0.3; ctx.stroke();
-      }
-
-      // Label
-      ctx.font = `300 13px 'Helvetica Neue', sans-serif`;
-      ctx.fillStyle = `rgba(${r},${g},${b},0.45)`;
-      ctx.textAlign = "center";
-      ctx.fillText(comp.label.toUpperCase(), cx, cy + R + 38);
-
-      animFrameRef.current = requestAnimationFrame(draw);
-    };
-
-    // Retry until window has real dimensions
-    let attempts = 0;
-    const tryStart = () => {
-      attempts++;
-      if (window.innerWidth > 0 && window.innerHeight > 0) {
-        animFrameRef.current = requestAnimationFrame(draw);
-      } else if (attempts < 20) {
-        setTimeout(tryStart, 100);
-      }
-    };
-    setTimeout(tryStart, 50);
-
-    return () => cancelAnimationFrame(animFrameRef.current);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const startCall = async (companionKey: string) => {
     const vapiKey = process.env.NEXT_PUBLIC_VAPI_PUBLICKEY;
     if (!vapiKey) return;
@@ -239,7 +113,9 @@ export default function VoicePage() {
       setVapiActive(false); setVapiConnecting(false);
       setSwitching(false); switchingRef.current = false;
     });
-    vapiInstance.on("volume-level", (level: number) => { volumeRef.current = level; });
+    vapiInstance.on("volume-level", (level: number) => {
+      setVolume(level);
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vapiInstance.on("message", (msg: any) => {
       if (msg?.type === "transcript" && msg?.transcriptType === "final") {
@@ -282,7 +158,7 @@ export default function VoicePage() {
     if (currentVapi) { try { currentVapi.stop(); } catch { /* ignore */ } }
     setVapiActive(false); setVapiConnecting(false);
     setSwitching(false); switchingRef.current = false;
-    volumeRef.current = 0;
+    setVolume(0);
     if (callTimerRef.current) clearInterval(callTimerRef.current);
   };
 
@@ -290,6 +166,7 @@ export default function VoicePage() {
   const currentInfo = COMPANION_INFO[activeCompanion] || COMPANION_INFO.dad;
   const accentColor = currentInfo.color;
   const firstName = profile?.full_name?.split(" ")[0] || "there";
+  const vol = Math.max(0.08, volume);
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: dark, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -298,116 +175,281 @@ export default function VoicePage() {
   );
 
   return (
-    <div style={{ width: "100vw", height: "100vh", background: dark, color: textColor, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", overflow: "hidden" }}>
-      <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10` }}>
-        <canvas ref={canvasRef} style={{ display: "block", position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
+    <>
+      <style>{`
+        @keyframes breathe {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.04); }
+        }
+        @keyframes ring1 {
+          0% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
+          100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+        }
+        @keyframes ring2 {
+          0% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+          100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+        }
+        @keyframes ring3 {
+          0% { transform: translate(-50%, -50%) scale(1); opacity: 0.2; }
+          100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
+        }
+        @keyframes particleOrbit1 {
+          from { transform: translate(-50%, -50%) rotate(0deg) translateX(var(--orbit-r)) rotate(0deg); }
+          to { transform: translate(-50%, -50%) rotate(360deg) translateX(var(--orbit-r)) rotate(-360deg); }
+        }
+        @keyframes particleOrbit2 {
+          from { transform: translate(-50%, -50%) rotate(120deg) translateX(var(--orbit-r)) rotate(-120deg); }
+          to { transform: translate(-50%, -50%) rotate(480deg) translateX(var(--orbit-r)) rotate(-480deg); }
+        }
+        @keyframes particleOrbit3 {
+          from { transform: translate(-50%, -50%) rotate(240deg) translateX(var(--orbit-r)) rotate(-240deg); }
+          to { transform: translate(-50%, -50%) rotate(600deg) translateX(var(--orbit-r)) rotate(-600deg); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translate(-50%, -50%) translateY(0px); }
+          50% { transform: translate(-50%, -50%) translateY(-12px); }
+        }
+        @keyframes rotate-mesh {
+          from { transform: rotateY(0deg); }
+          to { transform: rotateY(360deg); }
+        }
+        @keyframes shimmer {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 1; }
+        }
+        .sphere-container {
+          animation: float 4s ease-in-out infinite;
+        }
+        .sphere-breathe {
+          animation: breathe 3s ease-in-out infinite;
+        }
+        .ring-1 { animation: ring1 2.5s ease-out infinite; }
+        .ring-2 { animation: ring2 2.5s ease-out infinite 0.6s; }
+        .ring-3 { animation: ring3 2.5s ease-out infinite 1.2s; }
+      `}</style>
 
-        <div style={{ position: "absolute", bottom: "112px", left: "50%", transform: "translateX(-50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
+      <div style={{ width: "100vw", height: "100vh", background: dark, color: textColor, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", overflow: "hidden" }}>
+
+        {/* Left — CSS sphere animation — always visible */}
+        <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10`, background: "#000" }}>
+
+          {/* Deep background glow */}
+          <div style={{
+            position: "absolute", inset: 0,
+            background: `radial-gradient(ellipse at 50% 55%, ${accentColor}12 0%, ${accentColor}04 40%, transparent 70%)`,
+            transition: "background 1s ease",
+          }} />
+
+          {/* Ground reflection */}
+          <div style={{
+            position: "absolute", bottom: 0, left: "10%", right: "10%", height: "35%",
+            background: `radial-gradient(ellipse at 50% 100%, ${accentColor}18 0%, transparent 70%)`,
+            transition: "background 1s ease",
+          }} />
+
+          {/* Pulse rings — only when active */}
           {vapiActive && (
-            <div style={{ fontSize: "11px", color: `${accentColor}35`, fontFamily: "monospace", letterSpacing: "0.14em" }}>
-              {formatDuration(callDuration)}
-            </div>
+            <>
+              <div className="ring-1" style={{
+                position: "absolute", top: "45%", left: "50%",
+                width: "280px", height: "280px", borderRadius: "50%",
+                border: `1px solid ${accentColor}`,
+                boxShadow: `0 0 20px ${accentColor}40`,
+              }} />
+              <div className="ring-2" style={{
+                position: "absolute", top: "45%", left: "50%",
+                width: "280px", height: "280px", borderRadius: "50%",
+                border: `1px solid ${accentColor}80`,
+              }} />
+              <div className="ring-3" style={{
+                position: "absolute", top: "45%", left: "50%",
+                width: "280px", height: "280px", borderRadius: "50%",
+                border: `1px solid ${accentColor}40`,
+              }} />
+            </>
           )}
-          {!vapiActive && !vapiConnecting && !switching && (
-            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}25`, fontFamily: sans }}>Ready</div>
-          )}
-        </div>
 
-        <div style={{ position: "absolute", top: "24px", left: "24px", right: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
-          <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: `${gold}35`, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
-          <button onClick={() => setShowFamily(!showFamily)} style={{ background: "transparent", border: `0.5px solid rgba(235,229,220,0.06)`, color: "rgba(235,229,220,0.18)", padding: "8px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
-            Family
-          </button>
-        </div>
-
-        {showFamily && (
-          <div style={{ position: "absolute", top: "64px", right: "24px", zIndex: 20, background: "rgba(3,2,2,0.98)", border: `0.5px solid ${accentColor}20`, minWidth: "180px" }}>
-            <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", padding: "10px 16px", borderBottom: "0.5px solid rgba(235,229,220,0.04)", fontFamily: sans }}>
-              {vapiActive ? "Switch to" : "Talk to"}
+          {/* The sphere — always visible, pure CSS */}
+          <div className="sphere-container" style={{
+            position: "absolute", top: "45%", left: "50%",
+          }}>
+            <div className="sphere-breathe" style={{
+              width: "240px", height: "240px",
+              borderRadius: "50%",
+              background: `radial-gradient(circle at 35% 32%, 
+                rgba(255,255,255,0.9) 0%, 
+                rgba(255,255,255,0.4) 8%,
+                ${accentColor} 20%, 
+                ${accentColor}CC 45%,
+                ${accentColor}66 65%,
+                ${accentColor}22 80%,
+                ${accentColor}08 100%
+              )`,
+              boxShadow: `
+                0 0 60px ${accentColor}60,
+                0 0 120px ${accentColor}30,
+                0 0 200px ${accentColor}15,
+                inset 0 0 40px ${accentColor}40
+              `,
+              transform: "translate(-50%, -50%)",
+              transition: "box-shadow 0.3s ease, background 1s ease",
+              position: "relative",
+              overflow: "hidden",
+            }}>
+              {/* Particle dots on sphere surface */}
+              {Array.from({ length: 60 }).map((_, i) => {
+                const phi = Math.acos(1 - 2 * (i + 0.5) / 60);
+                const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+                const x = 50 + 44 * Math.sin(phi) * Math.cos(theta);
+                const y = 50 + 44 * Math.sin(phi) * Math.sin(theta);
+                const z = Math.cos(phi);
+                if (z < 0) return null;
+                const brightness = (z + 1) / 2;
+                const size = 1 + brightness * 2;
+                return (
+                  <div key={i} style={{
+                    position: "absolute",
+                    left: `${x}%`, top: `${y}%`,
+                    width: `${size}px`, height: `${size}px`,
+                    borderRadius: "50%",
+                    background: `rgba(255,255,255,${0.2 + brightness * 0.7})`,
+                    transform: "translate(-50%, -50%)",
+                    animation: `shimmer ${1.5 + (i % 5) * 0.3}s ease-in-out infinite ${(i * 0.05) % 1}s`,
+                  }} />
+                );
+              })}
             </div>
-            {Object.entries(COMPANION_INFO).map(([key, info]) => (
-              <div key={key}
-                onClick={() => {
-                  setShowFamily(false);
-                  if (vapiActive && key !== activeCompanion) handleFamilySwitch(key);
-                  else if (!vapiActive) { setActiveCompanion(key); activeCompanionRef.current = key; }
-                }}
-                style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: activeCompanion === key ? `${info.color}08` : "transparent", borderLeft: activeCompanion === key ? `1px solid ${info.color}` : "1px solid transparent", transition: "all 0.2s" }}
-                onMouseEnter={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.02)"; }}
-                onMouseLeave={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
-              >
-                <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: info.color, flexShrink: 0, opacity: activeCompanion === key ? 1 : 0.4 }} />
-                <div style={{ fontSize: "12px", fontWeight: "300", color: activeCompanion === key ? info.color : "rgba(235,229,220,0.4)" }}>{info.label}</div>
+          </div>
+
+          {/* Companion label */}
+          <div style={{
+            position: "absolute", top: "calc(45% + 140px)", left: "50%",
+            transform: "translateX(-50%)",
+            fontSize: "11px", letterSpacing: "0.28em", textTransform: "uppercase",
+            color: `${accentColor}60`, fontFamily: sans,
+            textAlign: "center", whiteSpace: "nowrap",
+            marginTop: "16px",
+          }}>
+            {currentInfo.label}
+          </div>
+
+          {/* Status + Timer */}
+          <div style={{
+            position: "absolute", bottom: "110px", left: "50%",
+            transform: "translateX(-50%)", textAlign: "center", zIndex: 10,
+          }}>
+            {vapiActive && (
+              <div style={{ fontSize: "11px", color: `${accentColor}40`, fontFamily: "monospace", letterSpacing: "0.14em" }}>
+                {formatDuration(callDuration)}
               </div>
-            ))}
+            )}
+            {!vapiActive && !vapiConnecting && !switching && (
+              <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}25`, fontFamily: sans }}>
+                Ready
+              </div>
+            )}
           </div>
-        )}
 
-        <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }}>
-          {!vapiActive && !vapiConnecting && !switching && (
-            <button onClick={() => startCall(activeCompanion)}
-              style={{ background: "transparent", color: `${accentColor}70`, border: `0.5px solid ${accentColor}30`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${accentColor}10`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
-              Begin
+          {/* Nav */}
+          <div style={{ position: "absolute", top: "24px", left: "24px", right: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
+            <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: `${gold}40`, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
+            <button onClick={() => setShowFamily(!showFamily)} style={{ background: "transparent", border: `0.5px solid rgba(235,229,220,0.08)`, color: "rgba(235,229,220,0.2)", padding: "8px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
+              Family
             </button>
-          )}
-          {(vapiActive || vapiConnecting) && !switching && (
-            <button onClick={endCall} style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.2)", color: "rgba(176,112,112,0.4)", padding: "12px 36px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
-              End
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", background: "#050404", height: "100vh", overflow: "hidden" }}>
-        <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}08`, flexShrink: 0 }}>
-          <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}30`, marginBottom: "4px", fontFamily: sans }}>
-            {vapiActive ? "Live" : "Conversation"}
           </div>
-          <div style={{ fontSize: "14px", fontWeight: "300", color: "rgba(235,229,220,0.5)" }}>
-            {firstName} & {currentInfo.label}
-          </div>
-        </div>
 
-        <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: "16px" }}>
-          {transcript.length === 0 ? (
-            <div style={{ paddingTop: "20px" }}>
-              <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.1)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.8", marginBottom: "12px" }}>
-                The conversation appears here as you talk.
-              </p>
-              <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.06)", fontFamily: sans, lineHeight: "1.7" }}>
-                Say "Can I talk to Mom?" to switch mid-call.
-              </p>
+          {/* Family dropdown */}
+          {showFamily && (
+            <div style={{ position: "absolute", top: "64px", right: "24px", zIndex: 20, background: "rgba(3,2,2,0.98)", border: `0.5px solid ${accentColor}20`, minWidth: "180px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", padding: "10px 16px", borderBottom: "0.5px solid rgba(235,229,220,0.04)", fontFamily: sans }}>
+                {vapiActive ? "Switch to" : "Talk to"}
+              </div>
+              {Object.entries(COMPANION_INFO).map(([key, info]) => (
+                <div key={key}
+                  onClick={() => {
+                    setShowFamily(false);
+                    if (vapiActive && key !== activeCompanion) handleFamilySwitch(key);
+                    else if (!vapiActive) { setActiveCompanion(key); activeCompanionRef.current = key; }
+                  }}
+                  style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: activeCompanion === key ? `${info.color}08` : "transparent", borderLeft: activeCompanion === key ? `1px solid ${info.color}` : "1px solid transparent", transition: "all 0.2s" }}
+                  onMouseEnter={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.02)"; }}
+                  onMouseLeave={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
+                >
+                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: info.color, flexShrink: 0, opacity: activeCompanion === key ? 1 : 0.4 }} />
+                  <div style={{ fontSize: "12px", fontWeight: "300", color: activeCompanion === key ? info.color : "rgba(235,229,220,0.4)" }}>{info.label}</div>
+                </div>
+              ))}
             </div>
-          ) : (
-            transcript.map((t, i) => {
-              if (t.role === "system") return (
-                <div key={i} style={{ textAlign: "center", padding: "6px 0" }}>
-                  <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans, letterSpacing: "0.08em" }}>{t.text}</span>
-                </div>
-              );
-              const companionInfo = COMPANION_INFO[t.companion] || currentInfo;
-              return (
-                <div key={i} style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: t.role === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: t.role === "assistant" ? `${companionInfo.color}45` : "rgba(235,229,220,0.12)", fontFamily: sans }}>
-                    {t.role === "assistant" ? companionInfo.label : firstName}
-                  </div>
-                  <div style={{ fontSize: "13px", color: t.role === "assistant" ? "rgba(235,229,220,0.6)" : "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.7", maxWidth: "90%", padding: "10px 14px", background: t.role === "assistant" ? `${companionInfo.color}05` : "rgba(235,229,220,0.02)", border: `0.5px solid ${t.role === "assistant" ? `${companionInfo.color}10` : "rgba(235,229,220,0.04)"}` }}>
-                    {t.text}
-                  </div>
-                </div>
-              );
-            })
           )}
+
+          {/* Begin / End */}
+          <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }}>
+            {!vapiActive && !vapiConnecting && !switching && (
+              <button onClick={() => startCall(activeCompanion)}
+                style={{ background: "transparent", color: `${accentColor}80`, border: `0.5px solid ${accentColor}40`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${accentColor}12`; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
+                Begin
+              </button>
+            )}
+            {(vapiActive || vapiConnecting) && !switching && (
+              <button onClick={endCall} style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.25)", color: "rgba(176,112,112,0.5)", padding: "12px 36px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
+                End
+              </button>
+            )}
+          </div>
         </div>
 
-        <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.03)`, flexShrink: 0 }}>
-          <p style={{ fontSize: "10px", color: "rgba(235,229,220,0.07)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
-            Say <span style={{ color: `${accentColor}20` }}>"Can I talk to Mom?"</span> to switch mid-call.
-          </p>
+        {/* Right — transcript */}
+        <div style={{ display: "flex", flexDirection: "column", background: "#050404", height: "100vh", overflow: "hidden" }}>
+          <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}08`, flexShrink: 0 }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}30`, marginBottom: "4px", fontFamily: sans }}>
+              {vapiActive ? "Live" : "Conversation"}
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: "300", color: "rgba(235,229,220,0.5)" }}>
+              {firstName} & {currentInfo.label}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {transcript.length === 0 ? (
+              <div style={{ paddingTop: "20px" }}>
+                <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.1)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.8", marginBottom: "12px" }}>
+                  The conversation appears here as you talk.
+                </p>
+                <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.06)", fontFamily: sans, lineHeight: "1.7" }}>
+                  Say "Can I talk to Mom?" to switch mid-call.
+                </p>
+              </div>
+            ) : (
+              transcript.map((t, i) => {
+                if (t.role === "system") return (
+                  <div key={i} style={{ textAlign: "center", padding: "6px 0" }}>
+                    <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans, letterSpacing: "0.08em" }}>{t.text}</span>
+                  </div>
+                );
+                const companionInfo = COMPANION_INFO[t.companion] || currentInfo;
+                return (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: t.role === "user" ? "flex-end" : "flex-start" }}>
+                    <div style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: t.role === "assistant" ? `${companionInfo.color}45` : "rgba(235,229,220,0.12)", fontFamily: sans }}>
+                      {t.role === "assistant" ? companionInfo.label : firstName}
+                    </div>
+                    <div style={{ fontSize: "13px", color: t.role === "assistant" ? "rgba(235,229,220,0.6)" : "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.7", maxWidth: "90%", padding: "10px 14px", background: t.role === "assistant" ? `${companionInfo.color}05` : "rgba(235,229,220,0.02)", border: `0.5px solid ${t.role === "assistant" ? `${companionInfo.color}10` : "rgba(235,229,220,0.04)"}` }}>
+                      {t.text}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.03)`, flexShrink: 0 }}>
+            <p style={{ fontSize: "10px", color: "rgba(235,229,220,0.07)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
+              Say <span style={{ color: `${accentColor}20` }}>"Can I talk to Mom?"</span> to switch mid-call.
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
