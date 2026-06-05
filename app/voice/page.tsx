@@ -62,6 +62,7 @@ export default function VoicePage() {
   const [switching, setSwitching] = useState(false);
   const [showFamily, setShowFamily] = useState(false);
   const [volume, setVolume] = useState(0);
+  const [btnHover, setBtnHover] = useState(false);
   const vapiRef = useRef<Vapi | null>(null);
   const transcriptRef = useRef<{ role: string; text: string; companion: string }[]>([]);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -175,131 +176,195 @@ export default function VoicePage() {
   );
 
   return (
-    <div style={{ width: "100vw", height: "100vh", background: dark, color: textColor, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", overflow: "hidden" }}>
+    <>
+      <style>{`
+        @keyframes pulseRing {
+          0% { transform: translate(-50%,-50%) scale(0.95); opacity: 0.6; }
+          100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; }
+        }
+        @keyframes spinSlow {
+          from { transform: translate(-50%,-50%) rotate(0deg); }
+          to { transform: translate(-50%,-50%) rotate(360deg); }
+        }
+        @keyframes breatheBtn {
+          0%,100% { opacity: 0.5; }
+          50% { opacity: 1; }
+        }
+        .pulse-ring-1 { animation: pulseRing 2.2s ease-out infinite; }
+        .pulse-ring-2 { animation: pulseRing 2.2s ease-out infinite 0.7s; }
+        .spin-ring { animation: spinSlow 8s linear infinite; }
+        .breathe-dot { animation: breatheBtn 2s ease-in-out infinite; }
+      `}</style>
 
-      {/* Left — sphere */}
-      <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10` }}>
+      <div style={{ width: "100vw", height: "100vh", background: dark, color: textColor, fontFamily: serif, display: "grid", gridTemplateColumns: "1fr 400px", overflow: "hidden" }}>
 
-        {/* SphereCanvas fills the full left panel — loaded client-side only */}
-        <div style={{ position: "absolute", inset: 0 }}>
-          <SphereCanvas
-            color={{ r: currentInfo.r, g: currentInfo.g, b: currentInfo.b }}
-            volume={volume}
-            label={currentInfo.label}
-          />
-        </div>
+        {/* Left — sphere */}
+        <div style={{ position: "relative", height: "100vh", overflow: "hidden", borderRight: `0.5px solid ${accentColor}10` }}>
 
-        {/* Timer */}
-        <div style={{ position: "absolute", bottom: "112px", left: "50%", transform: "translateX(-50%)", textAlign: "center", zIndex: 10, pointerEvents: "none" }}>
-          {vapiActive && (
-            <div style={{ fontSize: "11px", color: `${accentColor}40`, fontFamily: "monospace", letterSpacing: "0.14em" }}>
-              {formatDuration(callDuration)}
-            </div>
-          )}
-          {!vapiActive && !vapiConnecting && !switching && (
-            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}25`, fontFamily: sans }}>Ready</div>
-          )}
-        </div>
+          {/* Sphere canvas fills entire panel */}
+          <div style={{ position: "absolute", inset: 0 }}>
+            <SphereCanvas
+              color={{ r: currentInfo.r, g: currentInfo.g, b: currentInfo.b }}
+              volume={volume}
+              label={currentInfo.label}
+            />
+          </div>
 
-        {/* Nav */}
-        <div style={{ position: "absolute", top: "24px", left: "24px", right: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
-          <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: `${gold}40`, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
-          <button onClick={() => setShowFamily(!showFamily)} style={{ background: "transparent", border: `0.5px solid rgba(235,229,220,0.08)`, color: "rgba(235,229,220,0.2)", padding: "8px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
-            Family
-          </button>
-        </div>
+          {/* Nav */}
+          <div style={{ position: "absolute", top: "24px", left: "24px", right: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 }}>
+            <Link href="/dashboard" style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: `${gold}40`, fontFamily: sans, textDecoration: "none" }}>DAD</Link>
+            <button onClick={() => setShowFamily(!showFamily)} style={{ background: "transparent", border: `0.5px solid rgba(235,229,220,0.08)`, color: "rgba(235,229,220,0.2)", padding: "8px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans, borderRadius: "2px" }}>
+              Family
+            </button>
+          </div>
 
-        {/* Family dropdown */}
-        {showFamily && (
-          <div style={{ position: "absolute", top: "64px", right: "24px", zIndex: 20, background: "rgba(3,2,2,0.98)", border: `0.5px solid ${accentColor}20`, minWidth: "180px" }}>
-            <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", padding: "10px 16px", borderBottom: "0.5px solid rgba(235,229,220,0.04)", fontFamily: sans }}>
-              {vapiActive ? "Switch to" : "Talk to"}
-            </div>
-            {Object.entries(COMPANION_INFO).map(([key, info]) => (
-              <div key={key}
-                onClick={() => {
-                  setShowFamily(false);
-                  if (vapiActive && key !== activeCompanion) handleFamilySwitch(key);
-                  else if (!vapiActive) { setActiveCompanion(key); activeCompanionRef.current = key; }
-                }}
-                style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: activeCompanion === key ? `${info.color}08` : "transparent", borderLeft: activeCompanion === key ? `1px solid ${info.color}` : "1px solid transparent", transition: "all 0.2s" }}
-                onMouseEnter={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.02)"; }}
-                onMouseLeave={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
-              >
-                <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: info.color, flexShrink: 0, opacity: activeCompanion === key ? 1 : 0.4 }} />
-                <div style={{ fontSize: "12px", fontWeight: "300", color: activeCompanion === key ? info.color : "rgba(235,229,220,0.4)" }}>{info.label}</div>
+          {/* Family dropdown */}
+          {showFamily && (
+            <div style={{ position: "absolute", top: "64px", right: "24px", zIndex: 20, background: "rgba(0,5,16,0.97)", border: `0.5px solid ${accentColor}20`, minWidth: "180px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(235,229,220,0.2)", padding: "10px 16px", borderBottom: "0.5px solid rgba(235,229,220,0.04)", fontFamily: sans }}>
+                {vapiActive ? "Switch to" : "Talk to"}
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Begin / End */}
-        <div style={{ position: "absolute", bottom: "40px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }}>
-          {!vapiActive && !vapiConnecting && !switching && (
-            <button onClick={() => startCall(activeCompanion)}
-              style={{ background: "transparent", color: `${accentColor}80`, border: `0.5px solid ${accentColor}40`, padding: "14px 52px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: sans }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${accentColor}12`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
-              Begin
-            </button>
-          )}
-          {(vapiActive || vapiConnecting) && !switching && (
-            <button onClick={endCall} style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.25)", color: "rgba(176,112,112,0.5)", padding: "12px 36px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans }}>
-              End
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Right — transcript */}
-      <div style={{ display: "flex", flexDirection: "column", background: "#040303", height: "100vh", overflow: "hidden" }}>
-        <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}08`, flexShrink: 0 }}>
-          <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}30`, marginBottom: "4px", fontFamily: sans }}>
-            {vapiActive ? "Live" : "Conversation"}
-          </div>
-          <div style={{ fontSize: "14px", fontWeight: "300", color: "rgba(235,229,220,0.5)" }}>
-            {firstName} & {currentInfo.label}
-          </div>
-        </div>
-
-        <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: "16px" }}>
-          {transcript.length === 0 ? (
-            <div style={{ paddingTop: "20px" }}>
-              <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.1)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.8", marginBottom: "12px" }}>
-                The conversation appears here as you talk.
-              </p>
-              <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.06)", fontFamily: sans, lineHeight: "1.7" }}>
-                Say "Can I talk to Mom?" to switch mid-call.
-              </p>
+              {Object.entries(COMPANION_INFO).map(([key, info]) => (
+                <div key={key}
+                  onClick={() => {
+                    setShowFamily(false);
+                    if (vapiActive && key !== activeCompanion) handleFamilySwitch(key);
+                    else if (!vapiActive) { setActiveCompanion(key); activeCompanionRef.current = key; }
+                  }}
+                  style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: activeCompanion === key ? `${info.color}08` : "transparent", borderLeft: activeCompanion === key ? `1px solid ${info.color}` : "1px solid transparent", transition: "all 0.2s" }}
+                  onMouseEnter={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.02)"; }}
+                  onMouseLeave={e => { if (activeCompanion !== key) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
+                >
+                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: info.color, flexShrink: 0, opacity: activeCompanion === key ? 1 : 0.5 }} />
+                  <div style={{ fontSize: "12px", fontWeight: "300", color: activeCompanion === key ? info.color : "rgba(235,229,220,0.4)" }}>{info.label}</div>
+                </div>
+              ))}
             </div>
-          ) : (
-            transcript.map((t, i) => {
-              if (t.role === "system") return (
-                <div key={i} style={{ textAlign: "center", padding: "6px 0" }}>
-                  <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans, letterSpacing: "0.08em" }}>{t.text}</span>
-                </div>
-              );
-              const companionInfo = COMPANION_INFO[t.companion] || currentInfo;
-              return (
-                <div key={i} style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: t.role === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: t.role === "assistant" ? `${companionInfo.color}45` : "rgba(235,229,220,0.12)", fontFamily: sans }}>
-                    {t.role === "assistant" ? companionInfo.label : firstName}
-                  </div>
-                  <div style={{ fontSize: "13px", color: t.role === "assistant" ? "rgba(235,229,220,0.6)" : "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.7", maxWidth: "90%", padding: "10px 14px", background: t.role === "assistant" ? `${companionInfo.color}05` : "rgba(235,229,220,0.02)", border: `0.5px solid ${t.role === "assistant" ? `${companionInfo.color}10` : "rgba(235,229,220,0.04)"}` }}>
-                    {t.text}
-                  </div>
-                </div>
-              );
-            })
           )}
+
+          {/* Timer when active */}
+          {vapiActive && (
+            <div style={{ position: "absolute", bottom: "130px", left: "50%", transform: "translateX(-50%)", zIndex: 10, textAlign: "center" }}>
+              <div style={{ fontSize: "11px", color: `${accentColor}40`, fontFamily: "monospace", letterSpacing: "0.16em" }}>
+                {formatDuration(callDuration)}
+              </div>
+            </div>
+          )}
+
+          {/* ── UNIQUE BUTTON AREA ── */}
+          <div style={{ position: "absolute", bottom: "44px", left: "50%", transform: "translateX(-50%)", zIndex: 10 }}>
+
+            {/* BEGIN — orb button */}
+            {!vapiActive && !vapiConnecting && !switching && (
+              <div style={{ position: "relative", width: "80px", height: "80px", cursor: "pointer" }}
+                onClick={() => startCall(activeCompanion)}
+                onMouseEnter={() => setBtnHover(true)}
+                onMouseLeave={() => setBtnHover(false)}
+              >
+                {/* Pulse rings */}
+                <div className="pulse-ring-1" style={{ position: "absolute", top: "50%", left: "50%", width: "80px", height: "80px", borderRadius: "50%", border: `1px solid ${accentColor}`, pointerEvents: "none" }} />
+                <div className="pulse-ring-2" style={{ position: "absolute", top: "50%", left: "50%", width: "80px", height: "80px", borderRadius: "50%", border: `1px solid ${accentColor}80`, pointerEvents: "none" }} />
+                {/* Spinning dashed ring */}
+                <div className="spin-ring" style={{ position: "absolute", top: "50%", left: "50%", width: "80px", height: "80px", borderRadius: "50%", border: `1px dashed ${accentColor}40`, pointerEvents: "none" }} />
+                {/* Core button */}
+                <div style={{
+                  position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+                  width: "56px", height: "56px", borderRadius: "50%",
+                  background: btnHover ? `${accentColor}30` : `${accentColor}15`,
+                  border: `1px solid ${accentColor}${btnHover ? "90" : "50"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.3s ease",
+                  boxShadow: btnHover ? `0 0 30px ${accentColor}40` : `0 0 15px ${accentColor}20`,
+                }}>
+                  {/* Mic icon */}
+                  <svg width="18" height="22" viewBox="0 0 18 22" fill="none">
+                    <rect x="5" y="1" width="8" height="13" rx="4" stroke={accentColor} strokeWidth="1.5" opacity={btnHover ? 1 : 0.7} />
+                    <path d="M1 10C1 15 17 15 17 10" stroke={accentColor} strokeWidth="1.5" strokeLinecap="round" opacity={btnHover ? 1 : 0.7} />
+                    <line x1="9" y1="15" x2="9" y2="21" stroke={accentColor} strokeWidth="1.5" strokeLinecap="round" opacity={btnHover ? 1 : 0.7} />
+                    <line x1="6" y1="21" x2="12" y2="21" stroke={accentColor} strokeWidth="1.5" strokeLinecap="round" opacity={btnHover ? 1 : 0.7} />
+                  </svg>
+                </div>
+              </div>
+            )}
+
+            {/* CONNECTING */}
+            {vapiConnecting && !switching && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "56px", height: "56px", borderRadius: "50%", border: `1px solid ${accentColor}40`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div className="breathe-dot" style={{ width: "8px", height: "8px", borderRadius: "50%", background: accentColor }} />
+                </div>
+                <div style={{ fontSize: "9px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}50`, fontFamily: sans }}>connecting</div>
+              </div>
+            )}
+
+            {/* END — subtle X */}
+            {vapiActive && !switching && (
+              <div style={{ position: "relative", width: "60px", height: "60px", cursor: "pointer" }}
+                onClick={endCall}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).querySelector("div")!.style.background = "rgba(176,112,112,0.2)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).querySelector("div")!.style.background = "rgba(176,112,112,0.08)"; }}
+              >
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "48px", height: "48px", borderRadius: "50%", background: "rgba(176,112,112,0.08)", border: "0.5px solid rgba(176,112,112,0.3)", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.3s" }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <line x1="2" y1="2" x2="12" y2="12" stroke="rgba(176,112,112,0.7)" strokeWidth="1.5" strokeLinecap="round" />
+                    <line x1="12" y1="2" x2="2" y2="12" stroke="rgba(176,112,112,0.7)" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.03)`, flexShrink: 0 }}>
-          <p style={{ fontSize: "10px", color: "rgba(235,229,220,0.07)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
-            Say <span style={{ color: `${accentColor}20` }}>"Can I talk to Mom?"</span> to switch mid-call.
-          </p>
+        {/* Right — transcript */}
+        <div style={{ display: "flex", flexDirection: "column", background: "#040303", height: "100vh", overflow: "hidden" }}>
+          <div style={{ padding: "20px 28px", borderBottom: `0.5px solid ${accentColor}08`, flexShrink: 0 }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.2em", textTransform: "uppercase", color: `${accentColor}30`, marginBottom: "4px", fontFamily: sans }}>
+              {vapiActive ? "Live" : "Conversation"}
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: "300", color: "rgba(235,229,220,0.5)" }}>
+              {firstName} & {currentInfo.label}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {transcript.length === 0 ? (
+              <div style={{ paddingTop: "20px" }}>
+                <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.1)", fontFamily: sans, fontStyle: "italic", lineHeight: "1.8", marginBottom: "12px" }}>
+                  The conversation appears here as you talk.
+                </p>
+                <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.06)", fontFamily: sans, lineHeight: "1.7" }}>
+                  Say "Can I talk to Mom?" to switch mid-call.
+                </p>
+              </div>
+            ) : (
+              transcript.map((t, i) => {
+                if (t.role === "system") return (
+                  <div key={i} style={{ textAlign: "center", padding: "6px 0" }}>
+                    <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans, letterSpacing: "0.08em" }}>{t.text}</span>
+                  </div>
+                );
+                const companionInfo = COMPANION_INFO[t.companion] || currentInfo;
+                return (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: t.role === "user" ? "flex-end" : "flex-start" }}>
+                    <div style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: t.role === "assistant" ? `${companionInfo.color}45` : "rgba(235,229,220,0.12)", fontFamily: sans }}>
+                      {t.role === "assistant" ? companionInfo.label : firstName}
+                    </div>
+                    <div style={{ fontSize: "13px", color: t.role === "assistant" ? "rgba(235,229,220,0.6)" : "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.7", maxWidth: "90%", padding: "10px 14px", background: t.role === "assistant" ? `${companionInfo.color}05` : "rgba(235,229,220,0.02)", border: `0.5px solid ${t.role === "assistant" ? `${companionInfo.color}10` : "rgba(235,229,220,0.04)"}` }}>
+                      {t.text}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div style={{ padding: "14px 28px", borderTop: `0.5px solid rgba(235,229,220,0.03)`, flexShrink: 0 }}>
+            <p style={{ fontSize: "10px", color: "rgba(235,229,220,0.07)", fontFamily: sans, lineHeight: "1.6", margin: 0 }}>
+              Say <span style={{ color: `${accentColor}20` }}>"Can I talk to Mom?"</span> to switch mid-call.
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
