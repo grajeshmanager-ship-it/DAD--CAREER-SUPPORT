@@ -84,12 +84,11 @@ export default function DashboardPage() {
         setProfile(profileData);
         setLastAnalysis(profileData.last_analysis_at || null);
       }
-      // Load application counts
       const { data: appsData } = await supabase.from("job_applications").select("applied_date").eq("user_id", user.id);
       if (appsData) {
         setAppCount(appsData.length);
         const today = new Date().toISOString().split("T")[0];
-        setTodayAppCount(appsData.filter(a => a.applied_date === today).length);
+        setTodayAppCount(appsData.filter((a: { applied_date: string }) => a.applied_date === today).length);
       }
       setLoading(false);
     };
@@ -123,14 +122,12 @@ export default function DashboardPage() {
     router.push("/");
   };
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", background: dark, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
-        <div style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans }}>DAD</div>
-        <div style={{ fontSize: "13px", color: "rgba(235,229,220,0.3)", fontFamily: sans }}>Getting everything ready...</div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: dark, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
+      <div style={{ fontSize: "11px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans }}>DAD</div>
+      <div style={{ fontSize: "13px", color: "rgba(235,229,220,0.3)", fontFamily: sans }}>Getting everything ready...</div>
+    </div>
+  );
 
   const firstName = profile?.full_name?.split(" ")[0] || "there";
   const companionColor = profile?.companion_type ? COMPANION_COLORS[profile.companion_type] : gold;
@@ -145,25 +142,82 @@ export default function DashboardPage() {
   const feedItems: { type: "notice" | "alert" | "nudge" | "win"; message: string }[] = [];
   if (!hasDream) feedItems.push({ type: "nudge", message: `I still don't know your dream. Everything I do for you works better when I understand why this matters. Tell me.` });
   if (!hasResume) feedItems.push({ type: "alert", message: `I haven't seen your CV yet. I can't help you properly until I know what we're working with.` });
-  if (hasResume && atsScore < 60) feedItems.push({ type: "alert", message: `Your ATS score is ${atsScore}/100. That means most applications are being filtered out before a human ever sees your name.` });
-  if (hasResume && atsScore >= 70) feedItems.push({ type: "win", message: `Your CV is scoring ${atsScore}/100 on ATS. That's in the top range. Recruiters are seeing your name.` });
-  if (!hasCareer) feedItems.push({ type: "nudge", message: `You haven't completed your career assessment yet. I need to understand your direction before I can build your roadmap.` });
-  if (daysSinceAnalysis !== null && daysSinceAnalysis > 7) feedItems.push({ type: "alert", message: `You haven't practiced interviews in ${daysSinceAnalysis} days. That's too long. Skills fade without practice.` });
-  if (hasResume && hasCareer) feedItems.push({ type: "win", message: `Your profile is built. ${companionName} knows your skills, your direction, and your target roles. Now we sharpen the edge.` });
-  if (hasDream) feedItems.push({ type: "notice", message: `Your dream: ${profile?.dream}. ${companionName} hasn't forgotten. Every recommendation points there.` });
-  if (todayAppCount > 0) feedItems.push({ type: "win", message: `${todayAppCount} application${todayAppCount > 1 ? "s" : ""} logged today. ${companionName} is tracking every one. Keep going.` });
-  if (hasApps && todayAppCount === 0) feedItems.push({ type: "nudge", message: `You haven't logged any applications today. Consistency is what separates people who land from people who wait.` });
+  if (hasResume && atsScore < 60) feedItems.push({ type: "alert", message: `Your ATS score is ${atsScore}/100. Most applications are being filtered out before anyone sees your name.` });
+  if (hasResume && atsScore >= 70) feedItems.push({ type: "win", message: `Your CV is scoring ${atsScore}/100. That's in the top range. Recruiters are seeing your name.` });
+  if (!hasCareer) feedItems.push({ type: "nudge", message: `Career assessment not done yet. I need to understand your direction before I can build your roadmap.` });
+  if (daysSinceAnalysis !== null && daysSinceAnalysis > 7) feedItems.push({ type: "alert", message: `You haven't practiced interviews in ${daysSinceAnalysis} days. Skills fade without practice.` });
+  if (hasResume && hasCareer) feedItems.push({ type: "win", message: `Profile built. ${companionName} knows your skills, direction, and target roles.` });
+  if (hasDream) feedItems.push({ type: "notice", message: `Your dream: ${profile?.dream}. Every recommendation points there.` });
+  if (todayAppCount > 0) feedItems.push({ type: "win", message: `${todayAppCount} application${todayAppCount > 1 ? "s" : ""} logged today. Keep going.` });
+  if (hasApps && todayAppCount === 0) feedItems.push({ type: "nudge", message: `No applications logged today. Consistency separates people who land from people who wait.` });
 
   const nextAction = !hasDream
-    ? { label: "Tell me your dream", desc: "Everything works better when " + companionName + " understands why this matters to you.", href: "/dream", phase: "Foundation" }
+    ? { label: "Tell me your dream", desc: "Everything works better when " + companionName + " understands why this matters.", href: "/dream", phase: "Foundation" }
     : !hasResume
     ? { label: "Upload your CV", desc: "Let " + companionName + " learn who you are. This is where everything starts.", href: "/resume", phase: "First step" }
     : !hasCareer
-    ? { label: "Complete your career assessment", desc: companionName + " knows your skills. Now let them understand your direction.", href: "/career", phase: "Next step" }
-    : { label: "Practice your interview", desc: "Your profile is built. Now sharpen the edge. One session changes everything.", href: "/interview", phase: "Level up" };
+    ? { label: "Complete your career assessment", desc: "Talk to a specialist. " + companionName + " will build your roadmap.", href: "/career", phase: "Next step" }
+    : { label: "Practice your interview", desc: "Profile built. Now sharpen the edge.", href: "/interview", phase: "Level up" };
 
   const typeColors = { notice: companionColor, alert: "#B07070", nudge: gold, win: "#5B9E7A" };
   const typeLabels = { notice: "Noticed", alert: "Urgent", nudge: "Waiting", win: "Progress" };
+
+  const TILES = [
+    {
+      href: "/dream",
+      label: "Your Dream",
+      icon: "◈",
+      desc: hasDream ? profile?.dream?.slice(0, 60) + "..." : "Set your north star. Everything else follows.",
+      tag: hasDream ? "Set ✓" : "Not set",
+      active: hasDream,
+      color: gold,
+    },
+    {
+      href: "/resume",
+      label: "CV Intelligence",
+      icon: "◎",
+      desc: hasResume ? `ATS Score: ${atsScore}/100 · Salary range analysed` : "Upload your CV. Know exactly where you stand.",
+      tag: hasResume ? "Analysed ✓" : "Upload CV",
+      active: hasResume,
+      color: "#C9A84C",
+    },
+    {
+      href: "/career",
+      label: "Career Assessment",
+      icon: "◉",
+      desc: hasCareer ? profile?.career_path?.slice(0, 60) + "..." : "Talk to a specialist. Get your personal roadmap.",
+      tag: hasCareer ? "Completed ✓" : "Start now",
+      active: hasCareer,
+      color: "#7896FF",
+    },
+    {
+      href: "/interview",
+      label: "Interview Practice",
+      icon: "◐",
+      desc: "Written, voice, or live simulation. Real questions. Real feedback.",
+      tag: "Practice",
+      active: false,
+      color: "#5B9E7A",
+    },
+    {
+      href: "/voice",
+      label: `Talk to ${companionName}`,
+      icon: "◑",
+      desc: `${companionName} is ready. Voice call. Real conversation. Full family available.`,
+      tag: "Live now",
+      active: true,
+      color: companionColor,
+    },
+    {
+      href: "/action",
+      label: "Application Tracker",
+      icon: "◒",
+      desc: hasApps ? `${appCount} applications tracked · ${todayAppCount} today` : "Track every application. See your pipeline clearly.",
+      tag: hasApps ? `${appCount} tracked` : "Start tracking",
+      active: hasApps,
+      color: "#5BB4B4",
+    },
+  ];
 
   return (
     <div style={{ minHeight: "100vh", background: bg, color: text, fontFamily: serif }}>
@@ -177,128 +231,135 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* Daily feed */}
-      <section style={{ display: "grid", gridTemplateColumns: "55% 45%", borderBottom: "0.5px solid rgba(201,168,76,0.08)", minHeight: "60vh" }}>
+      {/* Hero — greeting + feed */}
+      <section style={{ display: "grid", gridTemplateColumns: "55% 45%", borderBottom: "0.5px solid rgba(201,168,76,0.08)", minHeight: "55vh" }}>
         <div style={{ padding: "56px 52px", borderRight: "0.5px solid rgba(201,168,76,0.08)", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "50%", background: `radial-gradient(ellipse at 20% 100%, ${companionColor}0C 0%, transparent 70%)`, pointerEvents: "none" }} />
           <div style={{ position: "relative", zIndex: 1 }}>
             <div style={{ fontSize: "10px", letterSpacing: "0.24em", textTransform: "uppercase", color: `${companionColor}80`, marginBottom: "12px", fontFamily: sans }}>{companionName} · {getGreeting()}</div>
             <h1 style={{ fontSize: "clamp(32px, 4.5vw, 56px)", fontWeight: "300", lineHeight: "1.1", marginBottom: "32px", letterSpacing: "-0.02em" }}>{getGreeting()},<br />{firstName}.</h1>
             {hasDream && (
-              <div style={{ marginBottom: "32px", padding: "20px 24px", borderLeft: `2px solid ${companionColor}40`, background: `${companionColor}06` }}>
-                <div style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: `${companionColor}70`, marginBottom: "8px", fontFamily: sans }}>Your dream</div>
-                <div style={{ fontSize: "16px", fontWeight: "300", color: text, lineHeight: "1.5" }}>{profile?.dream}</div>
-                {profile?.dream_reason && <div style={{ fontSize: "12px", color: "rgba(235,229,220,0.35)", fontFamily: sans, marginTop: "6px" }}>{profile.dream_reason}</div>}
+              <div style={{ marginBottom: "28px", padding: "18px 22px", borderLeft: `2px solid ${companionColor}40`, background: `${companionColor}06` }}>
+                <div style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: `${companionColor}70`, marginBottom: "6px", fontFamily: sans }}>Your dream</div>
+                <div style={{ fontSize: "15px", fontWeight: "300", color: text, lineHeight: "1.5" }}>{profile?.dream}</div>
               </div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: "1px", background: "rgba(201,168,76,0.05)" }}>
               {feedItems.slice(0, 4).map((item, i) => (
-                <div key={i} style={{ background: bg, padding: "16px 20px", display: "flex", gap: "16px", alignItems: "flex-start" }}>
-                  <div style={{ flexShrink: 0, marginTop: "2px" }}><div style={{ width: "6px", height: "6px", borderRadius: "50%", background: typeColors[item.type] }} /></div>
+                <div key={i} style={{ background: bg, padding: "14px 18px", display: "flex", gap: "14px", alignItems: "flex-start" }}>
+                  <div style={{ flexShrink: 0, marginTop: "3px" }}><div style={{ width: "5px", height: "5px", borderRadius: "50%", background: typeColors[item.type] }} /></div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: typeColors[item.type], fontFamily: sans, marginBottom: "4px", opacity: 0.7 }}>{typeLabels[item.type]}</div>
-                    <div style={{ fontSize: "13px", color: "rgba(235,229,220,0.6)", fontFamily: sans, fontWeight: "300", lineHeight: "1.65" }}>{item.message}</div>
+                    <div style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: typeColors[item.type], fontFamily: sans, marginBottom: "3px", opacity: 0.7 }}>{typeLabels[item.type]}</div>
+                    <div style={{ fontSize: "12px", color: "rgba(235,229,220,0.55)", fontFamily: sans, fontWeight: "300", lineHeight: "1.6" }}>{item.message}</div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-          <div style={{ position: "relative", zIndex: 1, marginTop: "32px" }}>
+          <div style={{ position: "relative", zIndex: 1, marginTop: "24px" }}>
             {profile?.situation && (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
                 <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: companionColor }} />
-                <span style={{ fontSize: "11px", color: "rgba(235,229,220,0.3)", fontFamily: sans }}>{SITUATION_LABELS[profile.situation] || profile.situation}{profile.country ? ` · ${profile.country}` : ""}</span>
+                <span style={{ fontSize: "11px", color: "rgba(235,229,220,0.25)", fontFamily: sans }}>{SITUATION_LABELS[profile.situation] || profile.situation}{profile.country ? ` · ${profile.country}` : ""}</span>
               </div>
             )}
           </div>
         </div>
 
+        {/* What companion knows */}
         <div style={{ padding: "56px 48px" }}>
-          <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", marginBottom: "28px", fontFamily: sans }}>What {companionName} knows about you</div>
+          <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", marginBottom: "24px", fontFamily: sans }}>What {companionName} knows about you</div>
           {[
-            { label: "Your CV", value: hasResume ? profile?.resume_summary?.slice(0, 80) + "..." : "Not uploaded yet", active: hasResume, extra: hasResume ? `${atsScore}/100` : null, extraColor: atsScore >= 70 ? "#5B9E7A" : atsScore >= 50 ? gold : "#B07070" },
+            { label: "Your CV", value: hasResume ? profile?.resume_summary?.slice(0, 75) + "..." : "Not uploaded yet", active: hasResume, extra: hasResume ? `${atsScore}/100` : null, extraColor: atsScore >= 70 ? "#5B9E7A" : atsScore >= 50 ? gold : "#B07070" },
             { label: "Your dream", value: hasDream ? profile?.dream : "Not set yet", active: hasDream, extra: null, extraColor: null },
-            { label: "Your direction", value: hasCareer ? profile?.career_path : "Assessment not completed", active: hasCareer, extra: null, extraColor: null },
-            { label: "Your skills", value: profile?.resume_skills?.length ? profile.resume_skills.slice(0, 4).join(" · ") : "Will appear after CV upload", active: !!profile?.resume_skills?.length, extra: null, extraColor: null },
-            { label: "Target roles", value: profile?.career_roles?.length ? profile.career_roles.slice(0, 3).join(" · ") : "Will appear after career assessment", active: !!profile?.career_roles?.length, extra: null, extraColor: null },
-            { label: "Applications", value: hasApps ? `${appCount} total · ${todayAppCount} today` : "No applications tracked yet", active: hasApps, extra: hasApps ? `${appCount}` : null, extraColor: gold },
+            { label: "Your direction", value: hasCareer ? profile?.career_path : "Assessment not done", active: hasCareer, extra: null, extraColor: null },
+            { label: "Your skills", value: profile?.resume_skills?.length ? profile.resume_skills.slice(0, 4).join(" · ") : "Upload CV to reveal", active: !!profile?.resume_skills?.length, extra: null, extraColor: null },
+            { label: "Target roles", value: profile?.career_roles?.length ? profile.career_roles.slice(0, 3).join(" · ") : "Complete assessment to reveal", active: !!profile?.career_roles?.length, extra: null, extraColor: null },
+            { label: "Applications", value: hasApps ? `${appCount} total · ${todayAppCount} today` : "None tracked yet", active: hasApps, extra: hasApps ? `${appCount}` : null, extraColor: gold },
           ].map((item, i) => (
-            <div key={i} style={{ padding: "16px 0", borderBottom: "0.5px solid rgba(201,168,76,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div key={i} style={{ padding: "13px 0", borderBottom: "0.5px solid rgba(201,168,76,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: item.active ? gold : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "4px" }}>{item.label}</div>
-                <div style={{ fontSize: "12px", color: item.active ? "rgba(235,229,220,0.55)" : "rgba(235,229,220,0.18)", fontFamily: sans, fontWeight: "300", lineHeight: "1.5" }}>{item.value}</div>
+                <div style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: item.active ? gold : "rgba(235,229,220,0.18)", fontFamily: sans, marginBottom: "3px" }}>{item.label}</div>
+                <div style={{ fontSize: "12px", color: item.active ? "rgba(235,229,220,0.5)" : "rgba(235,229,220,0.15)", fontFamily: sans, fontWeight: "300", lineHeight: "1.4" }}>{item.value}</div>
               </div>
-              {item.extra && <div style={{ fontSize: "13px", color: item.extraColor || gold, fontFamily: sans, flexShrink: 0, marginLeft: "16px" }}>{item.extra}</div>}
+              {item.extra && <div style={{ fontSize: "13px", color: item.extraColor || gold, fontFamily: sans, flexShrink: 0, marginLeft: "12px" }}>{item.extra}</div>}
             </div>
           ))}
         </div>
       </section>
 
-      {/* Next action */}
+      {/* Next action — single clear CTA */}
       <section style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
         <Link href={nextAction.href} style={{ textDecoration: "none", display: "block" }}>
-          <div style={{ padding: "48px 52px", display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: "40px", background: "rgba(201,168,76,0.02)", cursor: "pointer", transition: "background 0.3s" }}
+          <div style={{ padding: "40px 52px", display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: "40px", background: "rgba(201,168,76,0.02)", cursor: "pointer", transition: "background 0.3s" }}
             onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(201,168,76,0.04)"}
             onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(201,168,76,0.02)"}>
             <div>
-              <div style={{ fontSize: "10px", letterSpacing: "0.24em", textTransform: "uppercase", color: companionColor, marginBottom: "12px", fontFamily: sans, opacity: 0.7 }}>{nextAction.phase} · Recommended by {companionName}</div>
-              <h2 style={{ fontSize: "clamp(22px, 3vw, 36px)", fontWeight: "300", lineHeight: "1.2", marginBottom: "10px" }}>{nextAction.label}</h2>
-              <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.38)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", maxWidth: "560px", margin: 0 }}>{nextAction.desc}</p>
+              <div style={{ fontSize: "10px", letterSpacing: "0.24em", textTransform: "uppercase", color: companionColor, marginBottom: "10px", fontFamily: sans, opacity: 0.7 }}>{nextAction.phase} · Recommended by {companionName}</div>
+              <h2 style={{ fontSize: "clamp(20px, 2.8vw, 32px)", fontWeight: "300", lineHeight: "1.2", marginBottom: "8px" }}>{nextAction.label}</h2>
+              <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.35)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", maxWidth: "560px", margin: 0 }}>{nextAction.desc}</p>
             </div>
-            <div style={{ width: "52px", height: "52px", border: `0.5px solid ${companionColor}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", color: companionColor, flexShrink: 0 }}>→</div>
+            <div style={{ width: "48px", height: "48px", border: `0.5px solid ${companionColor}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", color: companionColor, flexShrink: 0 }}>→</div>
           </div>
         </Link>
       </section>
 
-      {/* Capabilities — 6 tiles including Action tracker */}
+      {/* ── 6 TILES — 3 columns, 2 rows — clear and readable ── */}
       <section style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
-          {[
-            { href: "/dream", label: "Your Dream", desc: hasDream ? profile?.dream || "Set" : "Not set yet", tag: hasDream ? "Set" : "Missing", active: hasDream },
-            { href: "/resume", label: "CV Intelligence", desc: "Upload your CV. Let " + companionName + " learn who you are.", tag: hasResume ? "Updated" : "Start here", active: hasResume },
-            { href: "/career", label: "Career Assessment", desc: "Answer honestly. " + companionName + " will tell you who you are.", tag: hasCareer ? "Completed" : "Next step", active: hasCareer },
-            { href: "/interview", label: "Interview Mode", desc: "Written. Voice. Live simulation. All three levels.", tag: "Practice", active: false },
-            { href: "/voice", label: "Talk to " + companionName, desc: "Voice call. Real conversation. " + companionName + " is ready.", tag: "Live", active: true },
-            { href: "/action", label: "Application Tracker", desc: hasApps ? `${appCount} tracked · ${todayAppCount} today` : "Track every application. Know your pipeline.", tag: hasApps ? `${appCount} apps` : "Track", active: hasApps },
-          ].map((item, i) => (
-            <Link key={i} href={item.href} style={{ textDecoration: "none", display: "block" }}>
-              <div style={{ background: bg, padding: "36px 28px", cursor: "pointer", height: "100%", transition: "background 0.25s" }}
-                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(201,168,76,0.03)"}
-                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = bg}>
-                <div style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: item.active ? companionColor : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "14px" }}>{item.tag}</div>
-                <div style={{ fontSize: "14px", fontWeight: "300", color: text, marginBottom: "10px", lineHeight: "1.3" }}>{item.label}</div>
-                <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.28)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", margin: "0 0 16px" }}>{item.desc}</p>
-                <div style={{ fontSize: "12px", color: companionColor, fontFamily: sans, opacity: 0.5 }}>Enter →</div>
+        <div style={{ padding: "32px 52px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", fontFamily: sans }}>Everything available to you</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)", margin: "0 0 0 0" }}>
+          {TILES.map((tile, i) => (
+            <Link key={i} href={tile.href} style={{ textDecoration: "none", display: "block" }}>
+              <div
+                style={{ background: bg, padding: "40px 40px", cursor: "pointer", height: "100%", transition: "all 0.25s", borderLeft: "2px solid transparent" }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = `${tile.color}06`;
+                  (e.currentTarget as HTMLDivElement).style.borderLeftColor = tile.color;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = bg;
+                  (e.currentTarget as HTMLDivElement).style.borderLeftColor = "transparent";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                  <div style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: tile.active ? tile.color : "rgba(235,229,220,0.2)", fontFamily: sans }}>{tile.tag}</div>
+                  <div style={{ fontSize: "18px", color: tile.active ? tile.color : "rgba(235,229,220,0.12)" }}>{tile.icon}</div>
+                </div>
+                <div style={{ fontSize: "17px", fontWeight: "300", color: text, marginBottom: "10px", lineHeight: "1.2" }}>{tile.label}</div>
+                <p style={{ fontSize: "12px", color: "rgba(235,229,220,0.3)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", margin: "0 0 20px" }}>{tile.desc}</p>
+                <div style={{ fontSize: "11px", color: tile.color, fontFamily: sans, opacity: 0.5 }}>Enter →</div>
               </div>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* Destiny progress */}
-      <section style={{ padding: "56px 52px", borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
-        <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", marginBottom: "28px", fontFamily: sans }}>Your progress · Dream → Action → Destiny</div>
+      {/* Progress — Dream Action Destiny */}
+      <section style={{ padding: "52px 52px", borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
+        <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", marginBottom: "24px", fontFamily: sans }}>Your journey · Dream → Action → Destiny</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
           {[
-            { phase: "Dream", color: gold, num: "01", status: hasDream ? "Set" : "Missing", desc: hasDream ? profile?.dream || "Career direction set" : "Tell " + companionName + " why this matters", progress: hasDream ? 100 : 0, done: hasDream, href: "/dream" },
-            { phase: "Action", color: "#6B8CFF", num: "02", status: hasResume && hasCareer ? "In progress" : "Not started", desc: hasResume ? "CV analysed · " + (hasCareer ? "Direction set" : "Career assessment next") : "Upload your CV to begin", progress: (hasResume ? 30 : 0) + (hasCareer ? 30 : 0) + (hasApps ? Math.min(40, appCount * 4) : 0), done: hasResume && hasCareer && hasApps, href: hasApps ? "/action" : hasResume ? "/career" : "/resume" },
-            { phase: "Destiny", color: "#5B9E7A", num: "03", status: "Ahead", desc: "The offer. The role. The life. " + companionName + " is walking you there.", progress: hasResume && hasCareer ? 15 : 0, done: false, href: "/dashboard" },
+            { phase: "Dream", color: gold, num: "01", status: hasDream ? "Set ✓" : "Missing", desc: hasDream ? profile?.dream || "Direction set" : "Tell " + companionName + " why this matters", progress: hasDream ? 100 : 0, href: "/dream" },
+            { phase: "Action", color: "#6B8CFF", num: "02", status: hasResume && hasCareer ? "In progress" : "Not started", desc: hasResume ? "CV analysed · " + (hasCareer ? "Direction set · Apply now" : "Career assessment next") : "Start with your CV", progress: (hasResume ? 30 : 0) + (hasCareer ? 30 : 0) + (hasApps ? Math.min(40, appCount * 4) : 0), href: hasApps ? "/action" : hasResume ? "/career" : "/resume" },
+            { phase: "Destiny", color: "#5B9E7A", num: "03", status: "Ahead", desc: "The offer. The role. The life you want.", progress: hasResume && hasCareer ? 15 : 0, href: "/dashboard" },
           ].map((item, i) => (
             <Link key={i} href={item.href} style={{ textDecoration: "none" }}>
-              <div style={{ background: bg, padding: "36px 40px", cursor: "pointer", transition: "background 0.25s" }}
+              <div style={{ background: bg, padding: "32px 36px", cursor: "pointer", transition: "background 0.25s" }}
                 onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(201,168,76,0.02)"}
                 onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = bg}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-                  <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.18)", fontFamily: sans }}>{item.num}</span>
-                  <div style={{ flex: 1, height: "0.5px", background: `${item.color}30` }} />
-                  <span style={{ fontSize: "10px", letterSpacing: "0.16em", textTransform: "uppercase", color: item.color, fontFamily: sans }}>{item.phase}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
+                  <span style={{ fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans }}>{item.num}</span>
+                  <div style={{ flex: 1, height: "0.5px", background: `${item.color}25` }} />
+                  <span style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: item.color, fontFamily: sans }}>{item.phase}</span>
                 </div>
-                <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: item.done ? item.color : "rgba(235,229,220,0.22)", fontFamily: sans, marginBottom: "8px" }}>{item.status}</div>
-                <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.38)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", margin: "0 0 16px" }}>{item.desc}</p>
-                <div style={{ height: "1px", background: "rgba(235,229,220,0.06)", borderRadius: "99px" }}>
-                  <div style={{ height: "100%", width: `${item.progress}%`, background: item.color, borderRadius: "99px", transition: "width 1s ease", opacity: 0.7 }} />
+                <div style={{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: item.progress > 0 ? item.color : "rgba(235,229,220,0.2)", fontFamily: sans, marginBottom: "6px" }}>{item.status}</div>
+                <p style={{ fontSize: "12px", color: "rgba(235,229,220,0.35)", fontFamily: sans, fontWeight: "300", lineHeight: "1.65", margin: "0 0 14px" }}>{item.desc}</p>
+                <div style={{ height: "1px", background: "rgba(235,229,220,0.05)" }}>
+                  <div style={{ height: "100%", width: `${item.progress}%`, background: item.color, transition: "width 1s ease", opacity: 0.7 }} />
                 </div>
-                <div style={{ fontSize: "10px", color: `${item.color}60`, fontFamily: sans, marginTop: "6px" }}>{item.progress}%</div>
+                <div style={{ fontSize: "10px", color: `${item.color}50`, fontFamily: sans, marginTop: "5px" }}>{item.progress}%</div>
               </div>
             </Link>
           ))}
@@ -309,7 +370,7 @@ export default function DashboardPage() {
       <footer style={{ padding: "24px 52px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: "10px", letterSpacing: "0.42em", textTransform: "uppercase", color: gold, fontFamily: sans }}>DAD</div>
         <div style={{ fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans, letterSpacing: "0.1em", textTransform: "uppercase" }}>Dreams · Actions · Destiny</div>
-        <button onClick={handleSignOut} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "10px", color: "rgba(235,229,220,0.18)", fontFamily: sans, letterSpacing: "0.12em", textTransform: "uppercase" }}>Sign out</button>
+        <button onClick={handleSignOut} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "10px", color: "rgba(235,229,220,0.15)", fontFamily: sans, letterSpacing: "0.12em", textTransform: "uppercase" }}>Sign out</button>
       </footer>
     </div>
   );
