@@ -280,10 +280,13 @@ export default function CareerPage() {
       });
 
       vapiInstance.on("call-end", () => {
-        setVapiActive(false);
-        if (callTimerRef.current) clearInterval(callTimerRef.current);
-        generateRoadmap();
-      });
+  setVapiActive(false);
+  if (callTimerRef.current) clearInterval(callTimerRef.current);
+  // Wait 2 seconds for final transcript messages to arrive before generating
+  setTimeout(() => {
+    generateRoadmap();
+  }, 2000);
+});
 
       vapiInstance.on("error", () => {
         setVapiActive(false);
