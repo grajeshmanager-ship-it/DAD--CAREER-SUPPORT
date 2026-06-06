@@ -25,16 +25,6 @@ const COMPANION_COLORS: Record<string, string> = {
   brother: "#5B8C6B", sister: "#B07070", friend: "#5B9898", partner: "#8870A8",
 };
 
-const COMPANION_VOICES: Record<string, string> = {
-  dad: "Every day you show up is a day you move forward. Let's see what we can get done today.",
-  mom: "I'm so glad you're here. Whatever today brings, we'll face it together.",
-  mentor: "The best time to make progress was yesterday. The second best time is right now.",
-  brother: "Alright, you're here. Stop overthinking. Let's just get to work.",
-  sister: "You've got more going for you than you realise. Let's remind you of that today.",
-  friend: "Good. You showed up. That's honestly half the battle. Now let's talk.",
-  partner: "Every step you take on this journey — I'm right here beside you. Let's go.",
-};
-
 const SITUATION_LABELS: Record<string, string> = {
   student: "Currently studying",
   fresh_graduate: "Recently graduated",
@@ -64,6 +54,7 @@ export default function DashboardPage() {
   const [lastAnalysis, setLastAnalysis] = useState<string | null>(null);
   const [appCount, setAppCount] = useState(0);
   const [todayAppCount, setTodayAppCount] = useState(0);
+  const [buddyCount, setBuddyCount] = useState(0);
   const hasSpoken = useRef(false);
 
   const sans = "'Helvetica Neue', Arial, sans-serif";
@@ -79,46 +70,36 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/login"); return; }
       setUserEmail(user.email || "");
+
       const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
       if (profileData) {
         setProfile(profileData);
         setLastAnalysis(profileData.last_analysis_at || null);
       }
+
       const { data: appsData } = await supabase.from("job_applications").select("applied_date").eq("user_id", user.id);
       if (appsData) {
         setAppCount(appsData.length);
         const today = new Date().toISOString().split("T")[0];
         setTodayAppCount(appsData.filter((a: { applied_date: string }) => a.applied_date === today).length);
       }
+
+      // Get buddy connection count
+      const { data: buddyData } = await supabase
+        .from("buddy_connections")
+        .select("id")
+        .or(`requester_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .eq("status", "accepted");
+      if (buddyData) setBuddyCount(buddyData.length);
+
       setLoading(false);
     };
     load();
   }, [router]);
 
-  useEffect(() => {
-    if (loading || !profile || hasSpoken.current) return;
-    if (sessionStorage.getItem("dad_dashboard_welcomed")) return;
-    hasSpoken.current = true;
-    sessionStorage.setItem("dad_dashboard_welcomed", "1");
-    const speak = () => {
-      if (!window.speechSynthesis) return;
-      const companionType = profile.companion_type || "dad";
-      const voiceLine = COMPANION_VOICES[companionType] || COMPANION_VOICES.dad;
-      const utter = new SpeechSynthesisUtterance(voiceLine);
-      utter.rate = 0.82; utter.pitch = companionType === "mom" || companionType === "sister" ? 1.08 : 0.88; utter.volume = 1;
-      const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find(v => v.name.includes("Daniel")) || voices.find(v => v.lang === "en-GB") || voices.find(v => v.lang.startsWith("en")) || voices[0];
-      if (preferred) utter.voice = preferred;
-      window.speechSynthesis.speak(utter);
-    };
-    if (window.speechSynthesis.getVoices().length > 0) setTimeout(speak, 900);
-    else window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 900);
-  }, [loading, profile]);
-
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    sessionStorage.removeItem("dad_dashboard_welcomed");
     router.push("/");
   };
 
@@ -138,6 +119,7 @@ export default function DashboardPage() {
   const atsScore = profile?.resume_ats_score || 0;
   const daysSinceAnalysis = lastAnalysis ? getDaysSince(lastAnalysis) : null;
   const hasApps = appCount > 0;
+  const hasBuddies = buddyCount > 0;
 
   const feedItems: { type: "notice" | "alert" | "nudge" | "win"; message: string }[] = [];
   if (!hasDream) feedItems.push({ type: "nudge", message: `I still don't know your dream. Everything I do for you works better when I understand why this matters. Tell me.` });
@@ -150,6 +132,8 @@ export default function DashboardPage() {
   if (hasDream) feedItems.push({ type: "notice", message: `Your dream: ${profile?.dream}. Every recommendation points there.` });
   if (todayAppCount > 0) feedItems.push({ type: "win", message: `${todayAppCount} application${todayAppCount > 1 ? "s" : ""} logged today. Keep going.` });
   if (hasApps && todayAppCount === 0) feedItems.push({ type: "nudge", message: `No applications logged today. Consistency separates people who land from people who wait.` });
+  if (hasBuddies) feedItems.push({ type: "win", message: `${buddyCount} career buddy${buddyCount > 1 ? "s" : ""} connected. You are not doing this alone.` });
+  if (!hasBuddies) feedItems.push({ type: "nudge", message: `You have no career buddies yet. DAD can match you with someone on the exact same path.` });
 
   const nextAction = !hasDream
     ? { label: "Tell me your dream", desc: "Everything works better when " + companionName + " understands why this matters.", href: "/dream", phase: "Foundation" }
@@ -157,6 +141,8 @@ export default function DashboardPage() {
     ? { label: "Upload your CV", desc: "Let " + companionName + " learn who you are. This is where everything starts.", href: "/resume", phase: "First step" }
     : !hasCareer
     ? { label: "Complete your career assessment", desc: "Talk to a specialist. " + companionName + " will build your roadmap.", href: "/career", phase: "Next step" }
+    : !hasBuddies
+    ? { label: "Find your career buddy", desc: "DAD will match you with someone on the same path. Same skills. Same stage. Real support.", href: "/buddy", phase: "Your circle" }
     : { label: "Practice your interview", desc: "Profile built. Now sharpen the edge.", href: "/interview", phase: "Level up" };
 
   const typeColors = { notice: companionColor, alert: "#B07070", nudge: gold, win: "#5B9E7A" };
@@ -217,6 +203,33 @@ export default function DashboardPage() {
       active: hasApps,
       color: "#5BB4B4",
     },
+    {
+      href: "/buddy",
+      label: "Buddy Connect",
+      icon: "⬡",
+      desc: hasBuddies ? `${buddyCount} career connection${buddyCount > 1 ? "s" : ""} · Chat with your circle` : "DAD matches you with people on the same path. Same skills. Same stage.",
+      tag: hasBuddies ? `${buddyCount} connected` : "New ✦",
+      active: hasBuddies,
+      color: "#A882D4",
+    },
+    {
+      href: "/action",
+      label: "Daily Tasks",
+      icon: "◧",
+      desc: todayAppCount > 0 ? `${todayAppCount} tasks completed today · Keep the streak going` : "Your daily job search tasks. Stay consistent.",
+      tag: todayAppCount > 0 ? `${todayAppCount} today` : "Daily",
+      active: todayAppCount > 0,
+      color: "#E07878",
+    },
+    {
+      href: "/career",
+      label: "Your Roadmap",
+      icon: "◫",
+      desc: hasCareer ? `${profile?.career_path} · View your full plan` : "Complete your assessment to unlock your personal roadmap.",
+      tag: hasCareer ? "View →" : "Locked",
+      active: hasCareer,
+      color: "#5BAA78",
+    },
   ];
 
   return (
@@ -231,7 +244,7 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* Hero — greeting + feed */}
+      {/* Hero */}
       <section style={{ display: "grid", gridTemplateColumns: "55% 45%", borderBottom: "0.5px solid rgba(201,168,76,0.08)", minHeight: "55vh" }}>
         <div style={{ padding: "56px 52px", borderRight: "0.5px solid rgba(201,168,76,0.08)", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "50%", background: `radial-gradient(ellipse at 20% 100%, ${companionColor}0C 0%, transparent 70%)`, pointerEvents: "none" }} />
@@ -276,6 +289,7 @@ export default function DashboardPage() {
             { label: "Your skills", value: profile?.resume_skills?.length ? profile.resume_skills.slice(0, 4).join(" · ") : "Upload CV to reveal", active: !!profile?.resume_skills?.length, extra: null, extraColor: null },
             { label: "Target roles", value: profile?.career_roles?.length ? profile.career_roles.slice(0, 3).join(" · ") : "Complete assessment to reveal", active: !!profile?.career_roles?.length, extra: null, extraColor: null },
             { label: "Applications", value: hasApps ? `${appCount} total · ${todayAppCount} today` : "None tracked yet", active: hasApps, extra: hasApps ? `${appCount}` : null, extraColor: gold },
+            { label: "Career buddies", value: hasBuddies ? `${buddyCount} connected` : "None yet — find your circle", active: hasBuddies, extra: hasBuddies ? `${buddyCount}` : null, extraColor: "#A882D4" },
           ].map((item, i) => (
             <div key={i} style={{ padding: "13px 0", borderBottom: "0.5px solid rgba(201,168,76,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ flex: 1 }}>
@@ -288,7 +302,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Next action — single clear CTA */}
+      {/* Next action */}
       <section style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
         <Link href={nextAction.href} style={{ textDecoration: "none", display: "block" }}>
           <div style={{ padding: "40px 52px", display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: "40px", background: "rgba(201,168,76,0.02)", cursor: "pointer", transition: "background 0.3s" }}
@@ -304,16 +318,16 @@ export default function DashboardPage() {
         </Link>
       </section>
 
-      {/* ── 6 TILES — 3 columns, 2 rows — clear and readable ── */}
+      {/* 9 tiles — 3 columns, 3 rows */}
       <section style={{ borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
-        <div style={{ padding: "32px 52px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ padding: "32px 52px 20px" }}>
           <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", fontFamily: sans }}>Everything available to you</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)", margin: "0 0 0 0" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
           {TILES.map((tile, i) => (
             <Link key={i} href={tile.href} style={{ textDecoration: "none", display: "block" }}>
               <div
-                style={{ background: bg, padding: "40px 40px", cursor: "pointer", height: "100%", transition: "all 0.25s", borderLeft: "2px solid transparent" }}
+                style={{ background: bg, padding: "36px 36px", cursor: "pointer", height: "100%", transition: "all 0.25s", borderLeft: "2px solid transparent" }}
                 onMouseEnter={e => {
                   (e.currentTarget as HTMLDivElement).style.background = `${tile.color}06`;
                   (e.currentTarget as HTMLDivElement).style.borderLeftColor = tile.color;
@@ -323,12 +337,12 @@ export default function DashboardPage() {
                   (e.currentTarget as HTMLDivElement).style.borderLeftColor = "transparent";
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
                   <div style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: tile.active ? tile.color : "rgba(235,229,220,0.2)", fontFamily: sans }}>{tile.tag}</div>
                   <div style={{ fontSize: "18px", color: tile.active ? tile.color : "rgba(235,229,220,0.12)" }}>{tile.icon}</div>
                 </div>
-                <div style={{ fontSize: "17px", fontWeight: "300", color: text, marginBottom: "10px", lineHeight: "1.2" }}>{tile.label}</div>
-                <p style={{ fontSize: "12px", color: "rgba(235,229,220,0.3)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", margin: "0 0 20px" }}>{tile.desc}</p>
+                <div style={{ fontSize: "16px", fontWeight: "300", color: text, marginBottom: "8px", lineHeight: "1.2" }}>{tile.label}</div>
+                <p style={{ fontSize: "11px", color: "rgba(235,229,220,0.28)", fontFamily: sans, fontWeight: "300", lineHeight: "1.7", margin: "0 0 16px" }}>{tile.desc}</p>
                 <div style={{ fontSize: "11px", color: tile.color, fontFamily: sans, opacity: 0.5 }}>Enter →</div>
               </div>
             </Link>
@@ -336,7 +350,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Progress — Dream Action Destiny */}
+      {/* Progress */}
       <section style={{ padding: "52px 52px", borderBottom: "0.5px solid rgba(201,168,76,0.08)" }}>
         <div style={{ fontSize: "10px", letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(201,168,76,0.35)", marginBottom: "24px", fontFamily: sans }}>Your journey · Dream → Action → Destiny</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
