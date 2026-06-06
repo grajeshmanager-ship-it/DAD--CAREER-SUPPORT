@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getUserIdFromRequest, rateLimitResponse } from "@/lib/rateLimit";
+import { writeMemories, getMemoryContext } from "@/lib/dad-memory";
 
 export const maxDuration = 60;
 
@@ -27,9 +28,7 @@ export async function POST(request: NextRequest) {
     const effectiveUserId = (await getUserIdFromRequest(request)) ?? "anonymous";
 
     const { allowed, remaining, resetAt } = await checkRateLimit(effectiveUserId, "career-assessment");
-    if (!allowed) {
-      return rateLimitResponse(remaining, resetAt);
-    }
+    if (!allowed) return rateLimitResponse(remaining, resetAt);
 
     const body = await request.json();
     const { situation, answers, isVoiceSession, persona } = body;
@@ -43,6 +42,12 @@ export async function POST(request: NextRequest) {
 
     const situationContext = SITUATION_CONTEXT[situation] || "";
     const isFounder = situation === "founder";
+
+    // Load existing memory context to make roadmap deeply personal
+    let memoryContext = "";
+    if (effectiveUserId !== "anonymous") {
+      memoryContext = await getMemoryContext(effectiveUserId);
+    }
 
     const contentSummary = isVoiceSession
       ? `This roadmap was generated from a REAL VOICE CONVERSATION between the person and a career counsellor (${persona}). The transcript below captures what the person actually said — their real words, concerns, ambitions, and personality. Use everything in the transcript to generate highly personalised insights.
@@ -62,63 +67,67 @@ ${JSON.stringify(answers, null, 2)}`;
           role: "user",
           content: `You are an expert career strategist generating a deeply personalised roadmap.
 
+${memoryContext ? `WHAT DAD ALREADY KNOWS ABOUT THIS PERSON:\n${memoryContext}\n` : ""}
+
 SITUATION: ${situation}
 CONTEXT: ${situationContext}
 
 ${contentSummary}
 
+Use everything DAD already knows about this person to make the roadmap deeply personal — reference their history, their previous conversations, their dream, their struggles if they have shared them before.
+
 Generate a JSON roadmap with exactly these fields:
 
 {
-  "careerPath": string (the specific path this person should pursue — precise, not generic),
-  "headline": string (one powerful sentence about their potential — personal to what they shared),
-  "whoYouAre": string (3-4 sentences: based on everything shared, here is who I think you are — reference specific things they said, warm but direct),
-  "strongestTraits": string[] (4-5 genuine character traits identified from the conversation — specific, not generic),
-  "topRoles": [
-    {
-      "title": string,
-      "salaryMin": number,
-      "salaryMax": number,
-      "currency": "GBP",
-      "fit": number (0-100),
-      "why": string (specific to this person)
-    }
-  ] (top 4 roles — for founders, use "Founder", "CEO", "CTO" etc),
-  "skillsToLearn": [
-    {
-      "skill": string,
-      "priority": "high" | "medium" | "low",
-      "timeMonths": number,
-      "why": string
-    }
-  ] (top 6 skills),
-  "actionPlan": [
-    {
-      "week": string,
-      "action": string,
-      "outcome": string
-    }
-  ] (12-week plan, 6 milestones),
-  "courses": [
-    {
-      "name": string,
-      "provider": string,
-      "durationWeeks": number,
-      "free": boolean,
-      "why": string
-    }
-  ] (top 4 courses),
-  "encouragement": string (warm, personal closing — 2-3 sentences referencing what they shared),
-  "summary": string (2 sentence summary for profile storage),
-  "careerRoles": string[] (array of role titles for profile storage)
-  ${isFounder ? `,
-  "founderPath": {
-    "idea": string (what they want to build),
-    "validation": string[] (4 steps to validate before building),
-    "firstSteps": string[] (4 concrete actions in first 90 days),
-    "skills": string[] (4 skills critical for this founder),
-    "resources": string[] (4 specific resources — books, communities, tools)
-  }` : ""}
+"careerPath": string (the specific path this person should pursue — precise, not generic),
+"headline": string (one powerful sentence about their potential — personal to what they shared),
+"whoYouAre": string (3-4 sentences: based on everything shared, here is who I think you are — reference specific things they said, warm but direct),
+"strongestTraits": string[] (4-5 genuine character traits identified from the conversation — specific, not generic),
+"topRoles": [
+{
+"title": string,
+"salaryMin": number,
+"salaryMax": number,
+"currency": "GBP",
+"fit": number (0-100),
+"why": string (specific to this person)
+}
+] (top 4 roles — for founders, use "Founder", "CEO", "CTO" etc),
+"skillsToLearn": [
+{
+"skill": string,
+"priority": "high" | "medium" | "low",
+"timeMonths": number,
+"why": string
+}
+] (top 6 skills),
+"actionPlan": [
+{
+"week": string,
+"action": string,
+"outcome": string
+}
+] (12-week plan, 6 milestones),
+"courses": [
+{
+"name": string,
+"provider": string,
+"durationWeeks": number,
+"free": boolean,
+"why": string
+}
+] (top 4 courses),
+"encouragement": string (warm, personal closing — 2-3 sentences referencing what they shared),
+"summary": string (2 sentence summary for profile storage),
+"careerRoles": string[] (array of role titles for profile storage)
+${isFounder ? `,
+"founderPath": {
+"idea": string (what they want to build),
+"validation": string[] (4 steps to validate before building),
+"firstSteps": string[] (4 concrete actions in first 90 days),
+"skills": string[] (4 skills critical for this founder),
+"resources": string[] (4 specific resources — books, communities, tools)
+}` : ""}
 }
 
 Return ONLY valid JSON. No explanation, no markdown, no backticks.`,
@@ -140,6 +149,7 @@ Return ONLY valid JSON. No explanation, no markdown, no backticks.`,
       );
     }
 
+    // Save to profile
     if (effectiveUserId !== "anonymous") {
       await supabase
         .from("profiles")
@@ -149,6 +159,72 @@ Return ONLY valid JSON. No explanation, no markdown, no backticks.`,
           last_analysis_at: new Date().toISOString(),
         })
         .eq("id", effectiveUserId);
+
+      // Write rich memories from this assessment
+      const topRoleTitles = roadmap.topRoles?.map((r: { title: string }) => r.title).join(", ") || "";
+      const topSkills = roadmap.skillsToLearn?.slice(0, 3).map((s: { skill: string }) => s.skill).join(", ") || "";
+      const personaName = persona || "career specialist";
+
+      await writeMemories([
+        {
+          user_id: effectiveUserId,
+          memory_type: "journey",
+          category: "career_assessment",
+          content: `Completed a career assessment with ${personaName}. Situation: ${situation}. Career path identified: ${roadmap.careerPath}. Top roles: ${topRoleTitles}.`,
+          importance: 9,
+          metadata: {
+            persona,
+            situation,
+            careerPath: roadmap.careerPath,
+            topRoles: roadmap.topRoles,
+            isVoiceSession,
+          },
+        },
+        {
+          user_id: effectiveUserId,
+          memory_type: "identity",
+          category: "traits",
+          content: `Strongest traits identified in assessment: ${roadmap.strongestTraits?.join(", ") || "not identified"}. ${roadmap.whoYouAre || ""}`,
+          importance: 8,
+          metadata: { traits: roadmap.strongestTraits },
+        },
+        {
+          user_id: effectiveUserId,
+          memory_type: "journey",
+          category: "skills_gap",
+          content: `Skills to develop identified: ${topSkills}. These are the priority areas for growth.`,
+          importance: 7,
+          metadata: { skills: roadmap.skillsToLearn },
+        },
+        {
+          user_id: effectiveUserId,
+          memory_type: "milestone",
+          category: "roadmap_generated",
+          content: `Roadmap generated. Headline: "${roadmap.headline}". Encouragement: "${roadmap.encouragement}"`,
+          importance: 8,
+          metadata: {
+            headline: roadmap.headline,
+            actionPlan: roadmap.actionPlan,
+            courses: roadmap.courses,
+          },
+        },
+        ...(isVoiceSession && answers.transcript ? [{
+          user_id: effectiveUserId,
+          memory_type: "journey" as const,
+          category: "voice_conversation",
+          content: `Had a voice career assessment conversation with ${personaName}. Key topics from transcript: ${answers.transcript.slice(0, 300)}...`,
+          importance: 8,
+          metadata: { persona, transcriptLength: answers.transcript.length },
+        }] : []),
+        ...(isFounder && roadmap.founderPath ? [{
+          user_id: effectiveUserId,
+          memory_type: "identity" as const,
+          category: "founder_ambition",
+          content: `Identified as a founder. Idea: ${roadmap.founderPath.idea}. First steps planned: ${roadmap.founderPath.firstSteps?.slice(0, 2).join(", ")}.`,
+          importance: 9,
+          metadata: { founderPath: roadmap.founderPath },
+        }] : []),
+      ]);
     }
 
     return NextResponse.json({ success: true, roadmap });
