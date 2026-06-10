@@ -74,6 +74,7 @@ interface Nudge {
 export default function BuddyPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
+  const [authHeaders, setAuthHeaders] = useState<Record<string, string>>({ "Content-Type": "application/json" });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("discover");
   const [matches, setMatches] = useState<Match[]>([]);
@@ -110,18 +111,43 @@ export default function BuddyPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
       setUserId(user.id);
+
+      // Get auth token for all API calls
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+      setAuthHeaders(headers);
+
       const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
       if (profile) setUserName(profile.full_name?.split(" ")[0] || "there");
+
       try {
-        await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "build_profile_from_memory" }) });
-        const profileRes = await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get_my_profile" }) });
+        // Build buddy profile automatically from their DAD data
+        await fetch("/api/buddy-match", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "build_profile_from_memory" }),
+        });
+
+        const profileRes = await fetch("/api/buddy-match", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "get_my_profile" }),
+        });
         const profileData = await profileRes.json();
         if (profileData.profile) {
           setMyProfile(profileData.profile);
-          setProfileForm({ career_stage: profileData.profile.career_stage || "searching", experience_years: profileData.profile.experience_years || 0, show_name: profileData.profile.show_name || false, show_location: profileData.profile.show_location || false, is_visible: profileData.profile.is_visible !== false });
+          setProfileForm({
+            career_stage: profileData.profile.career_stage || "searching",
+            experience_years: profileData.profile.experience_years || 0,
+            show_name: profileData.profile.show_name || false,
+            show_location: profileData.profile.show_location || false,
+            is_visible: profileData.profile.is_visible !== false,
+          });
         }
-        await loadConnections();
-        await loadNudges();
+
+        await loadConnectionsWithHeaders(headers);
+        await loadNudgesWithHeaders(headers);
       } catch { /* ignore */ }
       setLoading(false);
     };
@@ -131,26 +157,40 @@ export default function BuddyPage() {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  const loadConnections = async () => {
+  const loadConnectionsWithHeaders = async (headers: Record<string, string>) => {
     try {
-      const res = await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get_connections" }) });
+      const res = await fetch("/api/buddy-match", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "get_connections" }),
+      });
       const data = await res.json();
-      if (data.success) { setConnections([...(data.connections || []), ...(data.received || [])]); setPending(data.pending || []); }
+      if (data.success) {
+        setConnections([...(data.connections || []), ...(data.received || [])]);
+        setPending(data.pending || []);
+      }
     } catch { /* ignore */ }
   };
 
-  const loadNudges = async () => {
+  const loadNudgesWithHeaders = async (headers: Record<string, string>) => {
     try {
-      const res = await fetch("/api/buddy-match?type=nudges");
+      const res = await fetch("/api/buddy-match?type=nudges", { headers });
       const data = await res.json();
       if (data.success) setNudges(data.nudges || []);
     } catch { /* ignore */ }
   };
 
+  const loadConnections = () => loadConnectionsWithHeaders(authHeaders);
+  const loadNudges = () => loadNudgesWithHeaders(authHeaders);
+
   const findMatches = async () => {
     setFindingMatches(true);
     try {
-      const res = await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "find_matches" }) });
+      const res = await fetch("/api/buddy-match", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ action: "find_matches" }),
+      });
       const data = await res.json();
       if (data.success) setMatches(data.matches || []);
     } catch { /* ignore */ }
@@ -160,7 +200,11 @@ export default function BuddyPage() {
   const sendConnection = async (receiverId: string) => {
     setConnecting(receiverId);
     try {
-      await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "connect", receiverId }) });
+      await fetch("/api/buddy-match", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ action: "connect", receiverId }),
+      });
       setMatches(prev => prev.filter(m => m.id !== receiverId));
       setSelectedMatch(null);
     } catch { /* ignore */ }
@@ -169,14 +213,22 @@ export default function BuddyPage() {
 
   const respondToConnection = async (connectionId: string, accept: boolean) => {
     try {
-      await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "respond", connectionId, accept }) });
+      await fetch("/api/buddy-match", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ action: "respond", connectionId, accept }),
+      });
       await loadConnections();
     } catch { /* ignore */ }
   };
 
   const loadMessages = async (connectionId: string) => {
     try {
-      const res = await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get_messages", connectionId }) });
+      const res = await fetch("/api/buddy-match", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ action: "get_messages", connectionId }),
+      });
       const data = await res.json();
       if (data.success) setMessages(data.messages || []);
     } catch { /* ignore */ }
@@ -185,7 +237,15 @@ export default function BuddyPage() {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConnection) return;
     try {
-      await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send_message", connectionId: selectedConnection.id, content: newMessage.trim() }) });
+      await fetch("/api/buddy-match", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({
+          action: "send_message",
+          connectionId: selectedConnection.id,
+          content: newMessage.trim(),
+        }),
+      });
       setNewMessage("");
       await loadMessages(selectedConnection.id);
     } catch { /* ignore */ }
@@ -193,13 +253,20 @@ export default function BuddyPage() {
 
   const updateProfile = async () => {
     try {
-      await fetch("/api/buddy-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update_profile", profile: profileForm }) });
+      await fetch("/api/buddy-match", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ action: "update_profile", profile: profileForm }),
+      });
       setShowEditProfile(false);
     } catch { /* ignore */ }
   };
 
   const getOtherProfile = (conn: Connection) => conn.buddy_profiles;
-  const getOtherName = (conn: Connection) => { const p = getOtherProfile(conn); return p?.show_name ? conn.profiles?.full_name : null; };
+  const getOtherName = (conn: Connection) => {
+    const p = getOtherProfile(conn);
+    return p?.show_name ? conn.profiles?.full_name : null;
+  };
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: dark, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -224,9 +291,12 @@ export default function BuddyPage() {
           <div>
             <div style={{ fontSize: "10px", letterSpacing: "0.26em", textTransform: "uppercase", color: "rgba(201,168,76,0.45)", marginBottom: "12px", fontFamily: sans }}>DAD Buddy Connect</div>
             <h1 style={{ fontSize: "clamp(28px, 4vw, 48px)", fontWeight: "300", lineHeight: "1.1", marginBottom: "12px", letterSpacing: "-0.02em" }}>Your career circle.</h1>
-            <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.8", maxWidth: "560px", margin: 0 }}>DAD knows your full story. It finds people on similar paths and connects you. Not randomly. Precisely.</p>
+            <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.8", maxWidth: "560px", margin: 0 }}>
+              DAD knows your full story. It finds people on similar paths and connects you. Not randomly. Precisely.
+            </p>
           </div>
-          <button onClick={() => setShowEditProfile(!showEditProfile)} style={{ background: "transparent", border: `0.5px solid ${gold}30`, color: `${gold}60`, padding: "12px 24px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans, whiteSpace: "nowrap" }}>
+          <button onClick={() => setShowEditProfile(!showEditProfile)}
+            style={{ background: "transparent", border: `0.5px solid ${gold}30`, color: `${gold}60`, padding: "12px 24px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans, whiteSpace: "nowrap" }}>
             {showEditProfile ? "Close" : "My Profile"}
           </button>
         </div>
@@ -236,7 +306,9 @@ export default function BuddyPage() {
             {nudges.map((nudge, i) => (
               <div key={i} style={{ padding: "14px 20px", background: `${gold}08`, borderLeft: `2px solid ${gold}40`, marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ fontSize: "13px", color: "rgba(235,229,220,0.6)", fontFamily: sans, lineHeight: "1.6" }}>{nudge.content}</div>
-                <div style={{ fontSize: "10px", color: "rgba(235,229,220,0.2)", fontFamily: sans, flexShrink: 0, marginLeft: "16px" }}>{new Date(nudge.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+                <div style={{ fontSize: "10px", color: "rgba(235,229,220,0.2)", fontFamily: sans, flexShrink: 0, marginLeft: "16px" }}>
+                  {new Date(nudge.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                </div>
               </div>
             ))}
           </div>
@@ -260,12 +332,18 @@ export default function BuddyPage() {
               <div>
                 <div style={{ marginBottom: "24px" }}>
                   <div style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "8px", fontFamily: sans }}>Years of experience</div>
-                  <input type="number" min={0} max={30} value={profileForm.experience_years} onChange={e => setProfileForm(p => ({ ...p, experience_years: parseInt(e.target.value) || 0 }))}
+                  <input type="number" min={0} max={30} value={profileForm.experience_years}
+                    onChange={e => setProfileForm(p => ({ ...p, experience_years: parseInt(e.target.value) || 0 }))}
                     style={{ width: "80px", background: "transparent", border: "none", borderBottom: `0.5px solid ${gold}20`, color: text, fontSize: "24px", fontFamily: sans, fontWeight: "300", outline: "none", padding: "4px 0" }} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {[{ key: "show_name", label: "Show my name to matches" }, { key: "show_location", label: "Show my location" }, { key: "is_visible", label: "Visible for matching" }].map(item => (
-                    <div key={item.key} onClick={() => setProfileForm(p => ({ ...p, [item.key]: !p[item.key as keyof typeof p] }))} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+                  {[
+                    { key: "show_name", label: "Show my name to matches" },
+                    { key: "show_location", label: "Show my location" },
+                    { key: "is_visible", label: "Visible for matching" },
+                  ].map(item => (
+                    <div key={item.key} onClick={() => setProfileForm(p => ({ ...p, [item.key]: !p[item.key as keyof typeof p] }))}
+                      style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
                       <div style={{ width: "32px", height: "18px", borderRadius: "9px", background: profileForm[item.key as keyof typeof profileForm] ? gold : "rgba(235,229,220,0.1)", transition: "background 0.2s", position: "relative", flexShrink: 0 }}>
                         <div style={{ position: "absolute", top: "3px", left: profileForm[item.key as keyof typeof profileForm] ? "17px" : "3px", width: "12px", height: "12px", borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
                       </div>
@@ -285,13 +363,21 @@ export default function BuddyPage() {
                 </div>
               </div>
             )}
-            <button onClick={updateProfile} style={{ background: gold, color: dark, border: "none", padding: "14px 32px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>Save profile →</button>
+            <button onClick={updateProfile}
+              style={{ background: gold, color: dark, border: "none", padding: "14px 32px", cursor: "pointer", fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: sans }}>
+              Save profile →
+            </button>
           </div>
         )}
 
         <div style={{ display: "flex", gap: "1px", background: "rgba(201,168,76,0.06)", marginBottom: "32px" }}>
-          {([{ id: "discover", label: "Discover", count: matches.length }, { id: "connections", label: "My Connections", count: connections.length }, { id: "pending", label: "Pending", count: pending.length }] as { id: Tab; label: string; count: number }[]).map(t => (
-            <div key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: "16px 24px", cursor: "pointer", background: tab === t.id ? `${gold}10` : bg, borderBottom: tab === t.id ? `1px solid ${gold}` : "1px solid transparent", transition: "all 0.2s", textAlign: "center" }}>
+          {([
+            { id: "discover", label: "Discover", count: matches.length },
+            { id: "connections", label: "My Connections", count: connections.length },
+            { id: "pending", label: "Pending", count: pending.length },
+          ] as { id: Tab; label: string; count: number }[]).map(t => (
+            <div key={t.id} onClick={() => setTab(t.id)}
+              style={{ flex: 1, padding: "16px 24px", cursor: "pointer", background: tab === t.id ? `${gold}10` : bg, borderBottom: tab === t.id ? `1px solid ${gold}` : "1px solid transparent", transition: "all 0.2s", textAlign: "center" }}>
               <div style={{ fontSize: "22px", fontWeight: "300", color: tab === t.id ? gold : "rgba(235,229,220,0.3)", marginBottom: "2px" }}>{t.count}</div>
               <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: tab === t.id ? gold : "rgba(235,229,220,0.25)", fontFamily: sans }}>{t.label}</div>
             </div>
@@ -304,8 +390,11 @@ export default function BuddyPage() {
               <div style={{ textAlign: "center", padding: "80px 40px" }}>
                 <div style={{ fontSize: "48px", marginBottom: "24px", opacity: 0.2 }}>◎</div>
                 <h2 style={{ fontSize: "24px", fontWeight: "300", color: text, marginBottom: "12px" }}>Find your career circle</h2>
-                <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.8", maxWidth: "400px", margin: "0 auto 32px" }}>DAD will scan its network and find people whose skills, stage, and goals align with yours. Not random. Precisely matched.</p>
-                <button onClick={findMatches} disabled={findingMatches} style={{ background: gold, color: dark, border: "none", padding: "16px 48px", cursor: findingMatches ? "not-allowed" : "pointer", fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans, opacity: findingMatches ? 0.6 : 1 }}>
+                <p style={{ fontSize: "14px", color: "rgba(235,229,220,0.35)", fontFamily: sans, lineHeight: "1.8", maxWidth: "400px", margin: "0 auto 32px" }}>
+                  DAD will scan its network and find people whose skills, stage, and goals align with yours. Not random. Precisely matched.
+                </p>
+                <button onClick={findMatches} disabled={findingMatches}
+                  style={{ background: gold, color: dark, border: "none", padding: "16px 48px", cursor: findingMatches ? "not-allowed" : "pointer", fontSize: "11px", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: sans, opacity: findingMatches ? 0.6 : 1 }}>
                   {findingMatches ? "DAD is searching..." : "Find my matches →"}
                 </button>
               </div>
@@ -313,25 +402,25 @@ export default function BuddyPage() {
               <div style={{ display: "grid", gridTemplateColumns: selectedMatch ? "1fr 380px" : "1fr 1fr 1fr", gap: "1px", background: "rgba(201,168,76,0.06)" }}>
                 <div style={{ background: bg }}>
                   {matches.map((match, i) => {
-                    const stageColor = STAGE_COLORS[match.career_stage] || gold;
-                    const isSelected = selectedMatch?.id === match.id;
+                    const sc = STAGE_COLORS[match.career_stage] || gold;
+                    const isSel = selectedMatch?.id === match.id;
                     return (
-                      <div key={i} onClick={() => setSelectedMatch(isSelected ? null : match)}
-                        style={{ padding: "24px 28px", borderBottom: "0.5px solid rgba(201,168,76,0.05)", cursor: "pointer", background: isSelected ? `${stageColor}06` : "transparent", borderLeft: isSelected ? `2px solid ${stageColor}` : "2px solid transparent", transition: "all 0.2s" }}
-                        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.015)"; }}
-                        onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
+                      <div key={i} onClick={() => setSelectedMatch(isSel ? null : match)}
+                        style={{ padding: "24px 28px", borderBottom: "0.5px solid rgba(201,168,76,0.05)", cursor: "pointer", background: isSel ? `${sc}06` : "transparent", borderLeft: isSel ? `2px solid ${sc}` : "2px solid transparent", transition: "all 0.2s" }}
+                        onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.015)"; }}
+                        onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: `${stageColor}20`, border: `0.5px solid ${stageColor}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: stageColor, fontFamily: sans }}>
+                            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: `${sc}20`, border: `0.5px solid ${sc}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: sc, fontFamily: sans }}>
                               {match.display_name ? match.display_name[0].toUpperCase() : "?"}
                             </div>
                             <div>
                               <div style={{ fontSize: "13px", color: text }}>{match.display_name || "Anonymous Developer"}</div>
-                              <div style={{ fontSize: "10px", color: stageColor, fontFamily: sans }}>{STAGE_LABELS[match.career_stage]}</div>
+                              <div style={{ fontSize: "10px", color: sc, fontFamily: sans }}>{STAGE_LABELS[match.career_stage]}</div>
                             </div>
                           </div>
                           <div style={{ textAlign: "right" }}>
-                            <div style={{ fontSize: "20px", fontWeight: "200", color: stageColor }}>{match.score}%</div>
+                            <div style={{ fontSize: "20px", fontWeight: "200", color: sc }}>{match.score}%</div>
                             <div style={{ fontSize: "9px", color: "rgba(235,229,220,0.2)", fontFamily: sans }}>match</div>
                           </div>
                         </div>
@@ -343,17 +432,21 @@ export default function BuddyPage() {
                     );
                   })}
                   <div style={{ padding: "20px 28px", textAlign: "center" }}>
-                    <button onClick={findMatches} disabled={findingMatches} style={{ background: "transparent", border: `0.5px solid ${gold}20`, color: `${gold}40`, padding: "10px 24px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
+                    <button onClick={findMatches} disabled={findingMatches}
+                      style={{ background: "transparent", border: `0.5px solid ${gold}20`, color: `${gold}40`, padding: "10px 24px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: sans }}>
                       {findingMatches ? "Searching..." : "Refresh matches"}
                     </button>
                   </div>
                 </div>
+
                 {selectedMatch && (() => {
                   const sc = STAGE_COLORS[selectedMatch.career_stage] || gold;
                   return (
                     <div style={{ background: dark, padding: "28px", borderLeft: "0.5px solid rgba(201,168,76,0.08)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "24px" }}>
-                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: `${sc}20`, border: `0.5px solid ${sc}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", color: sc }}>{selectedMatch.display_name ? selectedMatch.display_name[0].toUpperCase() : "?"}</div>
+                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: `${sc}20`, border: `0.5px solid ${sc}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", color: sc }}>
+                          {selectedMatch.display_name ? selectedMatch.display_name[0].toUpperCase() : "?"}
+                        </div>
                         <button onClick={() => setSelectedMatch(null)} style={{ background: "none", border: "none", color: "rgba(235,229,220,0.2)", cursor: "pointer", fontSize: "18px" }}>×</button>
                       </div>
                       <div style={{ marginBottom: "20px" }}>
@@ -368,7 +461,11 @@ export default function BuddyPage() {
                       )}
                       <div style={{ marginBottom: "20px" }}>
                         <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "10px", fontFamily: sans }}>Why DAD matched you</div>
-                        {selectedMatch.reasons.map((r, i) => <div key={i} style={{ fontSize: "12px", color: "rgba(235,229,220,0.45)", fontFamily: sans, marginBottom: "6px", display: "flex", gap: "8px" }}><span style={{ color: gold, flexShrink: 0 }}>→</span>{r}</div>)}
+                        {selectedMatch.reasons.map((r, i) => (
+                          <div key={i} style={{ fontSize: "12px", color: "rgba(235,229,220,0.45)", fontFamily: sans, marginBottom: "6px", display: "flex", gap: "8px" }}>
+                            <span style={{ color: gold, flexShrink: 0 }}>→</span>{r}
+                          </div>
+                        ))}
                       </div>
                       <div style={{ marginBottom: "20px" }}>
                         <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(201,168,76,0.4)", marginBottom: "8px", fontFamily: sans }}>Tech stack</div>
@@ -406,12 +503,15 @@ export default function BuddyPage() {
                 const sc = STAGE_COLORS[op?.career_stage] || gold;
                 const isSel = selectedConnection?.id === conn.id;
                 return (
-                  <div key={i} onClick={async () => { setSelectedConnection(isSel ? null : conn); if (!isSel) await loadMessages(conn.id); }}
+                  <div key={i}
+                    onClick={async () => { setSelectedConnection(isSel ? null : conn); if (!isSel) await loadMessages(conn.id); }}
                     style={{ padding: "20px 28px", borderBottom: "0.5px solid rgba(201,168,76,0.05)", cursor: "pointer", background: isSel ? `${sc}06` : "transparent", borderLeft: isSel ? `2px solid ${sc}` : "2px solid transparent", transition: "all 0.2s" }}
                     onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "rgba(235,229,220,0.015)"; }}
                     onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                      <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: `${sc}20`, border: `0.5px solid ${sc}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", color: sc, flexShrink: 0 }}>{on ? on[0].toUpperCase() : "?"}</div>
+                      <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: `${sc}20`, border: `0.5px solid ${sc}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", color: sc, flexShrink: 0 }}>
+                        {on ? on[0].toUpperCase() : "?"}
+                      </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: "14px", color: text, marginBottom: "3px" }}>{on || "Anonymous Developer"}</div>
                         <div style={{ fontSize: "10px", color: sc, fontFamily: sans }}>{STAGE_LABELS[op?.career_stage] || "Unknown"}</div>
@@ -423,6 +523,7 @@ export default function BuddyPage() {
                 );
               })}
             </div>
+
             {selectedConnection && (() => {
               const op = getOtherProfile(selectedConnection);
               const on = getOtherName(selectedConnection);
@@ -444,23 +545,33 @@ export default function BuddyPage() {
                   )}
                   <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
                     {messages.length === 0 ? (
-                      <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.15)", fontFamily: sans, fontStyle: "italic", textAlign: "center", marginTop: "20px" }}>Start the conversation. You have more in common than you think.</p>
+                      <p style={{ fontSize: "13px", color: "rgba(235,229,220,0.15)", fontFamily: sans, fontStyle: "italic", textAlign: "center", marginTop: "20px" }}>
+                        Start the conversation. You have more in common than you think.
+                      </p>
                     ) : messages.map((msg, i) => {
                       const isMe = msg.sender_id === userId;
                       return (
                         <div key={i} style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: isMe ? "flex-end" : "flex-start" }}>
-                          <div style={{ fontSize: "9px", color: "rgba(235,229,220,0.2)", fontFamily: sans, letterSpacing: "0.08em", textTransform: "uppercase" }}>{isMe ? userName : (on || "Buddy")}</div>
-                          <div style={{ fontSize: "13px", color: isMe ? "rgba(235,229,220,0.7)" : "rgba(235,229,220,0.5)", fontFamily: sans, lineHeight: "1.65", maxWidth: "88%", padding: "10px 14px", background: isMe ? `${sc}12` : "rgba(235,229,220,0.03)", border: `0.5px solid ${isMe ? `${sc}20` : "rgba(235,229,220,0.05)"}` }}>{msg.content}</div>
+                          <div style={{ fontSize: "9px", color: "rgba(235,229,220,0.2)", fontFamily: sans, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                            {isMe ? userName : (on || "Buddy")}
+                          </div>
+                          <div style={{ fontSize: "13px", color: isMe ? "rgba(235,229,220,0.7)" : "rgba(235,229,220,0.5)", fontFamily: sans, lineHeight: "1.65", maxWidth: "88%", padding: "10px 14px", background: isMe ? `${sc}12` : "rgba(235,229,220,0.03)", border: `0.5px solid ${isMe ? `${sc}20` : "rgba(235,229,220,0.05)"}` }}>
+                            {msg.content}
+                          </div>
                         </div>
                       );
                     })}
                     <div ref={messagesEndRef} />
                   </div>
                   <div style={{ padding: "12px 20px", borderTop: `0.5px solid rgba(235,229,220,0.04)`, flexShrink: 0, display: "flex", gap: "10px" }}>
-                    <input value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()} placeholder="Write a message..."
+                    <input value={newMessage} onChange={e => setNewMessage(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                      placeholder="Write a message..."
                       style={{ flex: 1, background: "rgba(235,229,220,0.03)", border: `0.5px solid rgba(235,229,220,0.08)`, color: text, fontSize: "13px", fontFamily: sans, padding: "10px 14px", outline: "none" }} />
                     <button onClick={sendMessage} disabled={!newMessage.trim()}
-                      style={{ background: newMessage.trim() ? sc : "rgba(235,229,220,0.05)", color: newMessage.trim() ? dark : "rgba(235,229,220,0.2)", border: "none", padding: "10px 18px", cursor: newMessage.trim() ? "pointer" : "not-allowed", fontSize: "10px", letterSpacing: "0.1em", fontFamily: sans, transition: "all 0.2s" }}>Send</button>
+                      style={{ background: newMessage.trim() ? sc : "rgba(235,229,220,0.05)", color: newMessage.trim() ? dark : "rgba(235,229,220,0.2)", border: "none", padding: "10px 18px", cursor: newMessage.trim() ? "pointer" : "not-allowed", fontSize: "10px", letterSpacing: "0.1em", fontFamily: sans, transition: "all 0.2s" }}>
+                      Send
+                    </button>
                   </div>
                 </div>
               );
@@ -488,13 +599,25 @@ export default function BuddyPage() {
                       <div style={{ fontSize: "20px", fontWeight: "200", color: sc }}>{conn.match_score}%</div>
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px" }}>
-                      {conn.buddy_profiles?.tech_stack?.slice(0, 5).map((t, j) => <span key={j} style={{ fontSize: "10px", color: "rgba(235,229,220,0.4)", fontFamily: sans, border: "0.5px solid rgba(235,229,220,0.08)", padding: "2px 8px" }}>{t}</span>)}
+                      {conn.buddy_profiles?.tech_stack?.slice(0, 5).map((t, j) => (
+                        <span key={j} style={{ fontSize: "10px", color: "rgba(235,229,220,0.4)", fontFamily: sans, border: "0.5px solid rgba(235,229,220,0.08)", padding: "2px 8px" }}>{t}</span>
+                      ))}
                     </div>
-                    {conn.match_reasons?.slice(0, 2).map((r, j) => <div key={j} style={{ fontSize: "11px", color: "rgba(235,229,220,0.3)", fontFamily: sans, display: "flex", gap: "6px" }}><span style={{ color: gold }}>→</span>{r}</div>)}
+                    {conn.match_reasons?.slice(0, 2).map((r, j) => (
+                      <div key={j} style={{ fontSize: "11px", color: "rgba(235,229,220,0.3)", fontFamily: sans, display: "flex", gap: "6px" }}>
+                        <span style={{ color: gold }}>→</span>{r}
+                      </div>
+                    ))}
                   </div>
                   <div style={{ display: "flex", gap: "10px", flexShrink: 0 }}>
-                    <button onClick={() => respondToConnection(conn.id, false)} style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.2)", color: "rgba(176,112,112,0.5)", padding: "10px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>Decline</button>
-                    <button onClick={() => respondToConnection(conn.id, true)} style={{ background: gold, color: dark, border: "none", padding: "10px 24px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>Accept →</button>
+                    <button onClick={() => respondToConnection(conn.id, false)}
+                      style={{ background: "transparent", border: "0.5px solid rgba(176,112,112,0.2)", color: "rgba(176,112,112,0.5)", padding: "10px 20px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>
+                      Decline
+                    </button>
+                    <button onClick={() => respondToConnection(conn.id, true)}
+                      style={{ background: gold, color: dark, border: "none", padding: "10px 24px", cursor: "pointer", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: sans }}>
+                      Accept →
+                    </button>
                   </div>
                 </div>
               );
