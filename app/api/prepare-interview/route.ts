@@ -45,12 +45,26 @@ export async function POST(request: NextRequest) {
     }
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      model: "claude-haiku-4-5",
+      max_tokens: 6000,
       messages: [
         {
           role: "user",
-          content: `You are a senior hiring manager who has interviewed hundreds of candidates. Analyse this job description${resumeText ? " and the candidate's CV" : ""} and prepare a complete interview intelligence report.
+          content: `STEP 1 - Read this job description and identify the EXACT domain, technology stack, industry, and seniority.
+
+STEP 2 - Become the most senior real interviewer for THAT EXACT role:
+- Software role: you are a principal engineer in that exact stack who runs technical panels
+- Data role: you are a lead data scientist/engineer who tests real modelling and pipeline knowledge
+- Nursing/medical role: you are a clinical director who tests real patient scenarios and protocols
+- Sales role: you are a sales director who tests live objection handling and pipeline thinking
+- Finance/banking role: you are a finance director who tests real accounting/valuation/regulation knowledge
+- Marketing role: you are a CMO who tests real campaign, funnel, and metric decisions
+- Any other role: you are the most senior practitioner in that exact field
+
+STEP 3 - Write the questions a REAL interview panel for THIS role actually asks. Rules:
+- Questions MUST reference the SPECIFIC technologies, tools, regulations, or scenarios named in the job description. NEVER generic.
+- Mix: about 5 hard technical/domain-knowledge questions with factually checkable answers, 2 real-world scenario questions from this exact industry, 2 behavioural questions tied to this role's real pressures, 1 motivation question.
+- Every question must have a defined correct answer that a strong candidate in this field would give.
 
 Return a JSON object with exactly these fields:
 
@@ -58,38 +72,39 @@ Return a JSON object with exactly these fields:
   "roleTitle": string,
   "company": string (extract if mentioned, otherwise "the company"),
   "industry": string,
-  "seniorityLevel": string (e.g. "Junior", "Mid-level", "Senior", "Lead"),
+  "seniorityLevel": string,
   "isTechnical": boolean,
-  "roleAnalysis": string (what this role really needs — 2-3 sentences),
+  "roleAnalysis": string (what this role really needs - 2-3 sentences),
   "interviewerPersona": {
-    "name": string (realistic interviewer name),
-    "title": string (e.g. "Engineering Manager", "HR Director"),
-    "style": string (e.g. "Direct and technical", "Warm but probing")
+    "name": string (realistic name),
+    "title": string (the real job title of who would interview for this role),
+    "style": string
   },
-  "whatGetsYouHired": string[] (top 5 things that will impress them),
-  "whatGetsYouRejected": string[] (top 5 red flags),
-  "keySkills": [{ "skill": string, "importance": "critical" | "important" | "nice-to-have" }] (top 8),
+  "whatGetsYouHired": string[] (5 - specific to this exact role),
+  "whatGetsYouRejected": string[] (5 - specific to this exact role),
+  "keySkills": [{ "skill": string, "importance": "critical" | "important" | "nice-to-have" }] (top 8 from the JD),
   "questions": [
     {
       "id": string,
-      "question": string,
-      "type": "behavioural" | "technical" | "situational" | "motivation",
+      "question": string (the real question, referencing the actual tech/scenario from the JD),
+      "type": "technical" | "scenario" | "behavioural" | "motivation",
       "difficulty": "easy" | "medium" | "hard",
-      "why": string (why they ask this),
-      "tips": string (how to answer well),
-      "idealAnswerFramework": string (STAR or specific framework to use)
+      "expectedAnswer": string (the model answer a strong candidate gives - specific and factual, 2-4 sentences),
+      "keyPoints": string[] (3-4 specific points that MUST appear in a correct answer - these are used to grade the candidate),
+      "commonMistakes": string (the typical wrong answer weak candidates give - 1 sentence),
+      "why": string (1 sentence - why interviewers ask this)
     }
-  ] (exactly 10 questions — mix of types appropriate for the role),
-  "cheatSheet": string[] (8 bullet points to memorise before walking in),
-  "salaryNegotiationTips": string[] (3 tips specific to this role and level)
+  ] (exactly 10 questions),
+  "cheatSheet": string[] (8 short points to memorise - specific to this role),
+  "salaryNegotiationTips": string[] (3 - specific to this role and level)
 }
 
-Return ONLY valid JSON. No explanation, no markdown, no backticks.
+Keep every field concise. Return ONLY valid JSON. No explanation, no markdown, no backticks.
 
 JOB DESCRIPTION:
 ${jobDescription}
 
-${resumeText ? `CANDIDATE CV:\n${resumeText}` : ""}`,
+${resumeText ? `CANDIDATE CV (tailor question difficulty and focus to their background):\n${resumeText.slice(0, 3000)}` : ""}`,
         },
       ],
     });
