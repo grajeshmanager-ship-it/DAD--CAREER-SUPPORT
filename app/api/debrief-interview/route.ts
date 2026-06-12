@@ -28,21 +28,12 @@ export async function POST(request: NextRequest) {
 
     const qaText = questions
       .map((q: { question: string; expectedAnswer?: string; keyPoints?: string[]; type?: string }, i: number) =>
-        `Q${i + 1} [${q.type || "general"}]: ${q.question}
-EXPECTED CORRECT ANSWER: ${q.expectedAnswer || "Evaluate on merit"}
-KEY POINTS REQUIRED: ${q.keyPoints?.join(" | ") || "n/a"}
-CANDIDATE'S ANSWER: ${answers[i]?.trim() || "(NOT ANSWERED)"}`
+        `Q${i + 1} [${q.type || "general"}]: ${q.question}\nEXPECTED CORRECT ANSWER: ${q.expectedAnswer || "Evaluate on merit"}\nKEY POINTS REQUIRED: ${q.keyPoints?.join(" | ") || "n/a"}\nCANDIDATE'S ANSWER: ${answers[i]?.trim() || "(NOT ANSWERED)"}`
       )
       .join("\n\n");
 
     const behaviorText = behaviorData
-      ? `
-LIVE BEHAVIOUR DATA (from camera session):
-- Eye contact score: ${Math.round(behaviorData.eyeContactScore)}%
-- Confidence score: ${Math.round(behaviorData.confidenceScore)}%
-- Speaking pace: ${Math.round(behaviorData.paceScore)}%
-- Filler words: ${behaviorData.fillerCount} (${behaviorData.fillerWords?.join(", ") || "none"})
-`
+      ? `\nLIVE BEHAVIOUR DATA (from camera session):\n- Eye contact score: ${Math.round(behaviorData.eyeContactScore)}%\n- Confidence score: ${Math.round(behaviorData.confidenceScore)}%\n- Speaking pace: ${Math.round(behaviorData.paceScore)}%\n- Filler words: ${behaviorData.fillerCount} (${behaviorData.fillerWords?.join(", ") || "none"})\n`
       : "";
 
     const message = await anthropic.messages.create({
