@@ -289,7 +289,8 @@ export default function InterviewPage() {
       });
 
       // Use the dedicated INTERVIEWER assistant — not DAD
-      await vapiInstance.start(INTERVIEWER_VAPI_ID, { firstMessage });
+      const questionsList = prep.questions.map((q,i)=>`${i+1}. ${q.question}`).join("
+"); const vov = { interviewerName: prep.interviewerPersona.name, interviewerTitle: prep.interviewerPersona.title, company: prep.company, roleTitle: prep.roleTitle, industry: prep.industry, seniorityLevel: prep.seniorityLevel, roleAnalysis: prep.roleAnalysis, questionsList }; await vapiInstance.start(INTERVIEWER_VAPI_ID, { firstMessage, variableValues: vov });
     } catch {
       setVapiConnecting(false);
       setError("Failed to start voice interview. Please try again.");
